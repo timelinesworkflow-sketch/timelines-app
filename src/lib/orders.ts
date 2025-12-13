@@ -54,7 +54,7 @@ export async function getOrdersForStage(
     staffId?: string
 ): Promise<Order[]> {
     const ordersRef = collection(db, "orders");
-    let q = query(
+    const q = query(
         ordersRef,
         where("currentStage", "==", stage),
         where("status", "in", ["confirmed_locked", "in_progress"]),
