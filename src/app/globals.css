@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --secondary: #8b5cf6;
+  --accent: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --border: #e5e7eb;
+  --card-bg: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f172a;
+    --foreground: #f1f5f9;
+    --primary: #818cf8;
+    --primary-dark: #6366f1;
+    --secondary: #a78bfa;
+    --accent: #34d399;
+    --danger: #f87171;
+    --warning: #fbbf24;
+    --border: #334155;
+    --card-bg: #1e293b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95;
+  }
+
+  .btn-primary {
+    @apply bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply bg-[var(--secondary)] text-white hover:opacity-90 shadow-md hover:shadow-lg;
+  }
+
+  .btn-danger {
+    @apply bg-[var(--danger)] text-white hover:opacity-90 shadow-md hover:shadow-lg;
+  }
+
+  .btn-outline {
+    @apply border-2 border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white;
+  }
+
+  .card {
+    @apply bg-[var(--card-bg)] rounded-xl shadow-md p-4 sm:p-6 border border-[var(--border)];
+  }
+
+  .input {
+    @apply w-full px-4 py-3 rounded-lg border-2 border-[var(--border)] bg-white dark:bg-gray-800 
+           focus:outline-none focus:border-[var(--primary)] transition-colors text-base;
+  }
+
+  .label {
+    @apply block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300;
+  }
+
+  .page-container {
+    @apply min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800;
+  }
+
+  .page-content {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+  }
+}
+
+/* Mobile-first responsive utilities */
+@layer utilities {
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
