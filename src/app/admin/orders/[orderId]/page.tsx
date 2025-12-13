@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { useParams } from "next/navigation";
-import { doc, getDoc collection, getDocs, query, orderBy as firestoreOrderBy } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, orderBy as firestoreOrderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Order, TimelineEntry, STAGE_DISPLAY_NAMES } from "@/types";
 import { ArrowLeft, Package, User, Calendar, Clock } from "lucide-react";
@@ -134,10 +134,10 @@ export default function OrderDetailPage() {
                                         <div
                                             key={stage}
                                             className={`p-3 rounded-lg ${isCompleted
-                                                    ? "bg-green-50 dark:bg-green-900/20"
-                                                    : isPending
-                                                        ? "bg-blue-50 dark:bg-blue-900/20"
-                                                        : "bg-gray-50 dark:bg-gray-800"
+                                                ? "bg-green-50 dark:bg-green-900/20"
+                                                : isPending
+                                                    ? "bg-blue-50 dark:bg-blue-900/20"
+                                                    : "bg-gray-50 dark:bg-gray-800"
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between">
