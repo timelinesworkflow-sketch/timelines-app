@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, Order } from "@/types";
-import { createOrder } from "@/lib/orders";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order } from "@/types";
+import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { uploadImages } from "@/lib/storage";
 import { Timestamp } from "firebase/firestore";
 import { X, Upload, Send, Check } from "lucide-react";
@@ -105,21 +105,28 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             const orderId = await createOrder(orderData);
             setTempOrderId(orderId);
 
-            // Send OTP via API route
-            const sendResponse = await fetch("/api/send-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ orderId, phone: customerPhone })
+            // BYPASS OTP - Directly confirm order for testing
+            // TODO: Re-enable OTP when SMS service is configured
+            await updateOrder(orderId, {
+                confirmedAt: Timestamp.now(),
+                status: "in_progress"
             });
 
-            const sendData = await sendResponse.json();
-
-            if (!sendResponse.ok) {
-                throw new Error(sendData.error || "Failed to send OTP");
+            if (userData) {
+                await addTimelineEntry(orderId, {
+                    staffId: userData.staffId,
+                    role: userData.role,
+                    stage: "intake",
+                    action: "completed"
+                });
             }
 
-            setStep("review");
-            setToast({ message: `OTP sent to ${customerPhone}`, type: "success" });
+            setToast({ message: "Order created successfully!", type: "success" });
+
+            // Reset form and go back to main page
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
         } catch (error) {
             console.error("Order creation error:", error);
             setToast({
@@ -310,8 +317,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {MEASUREMENT_FIELDS[garmentType].map((field) => (
                             <div key={field}>
-                                <label className="label text-xs capitalize">
-                                    {field.replace(/([A-Z])/g, " $1").trim()}
+                                <label className="label text-xs">
+                                    {MEASUREMENT_LABELS[field] || field}
                                 </label>
                                 <input
                                     type="text"

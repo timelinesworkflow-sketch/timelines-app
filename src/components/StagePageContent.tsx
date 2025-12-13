@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order } from "@/types";
+import { Order, MEASUREMENT_LABELS } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye } from "lucide-react";
 import Toast from "@/components/Toast";
 import { Timestamp } from "firebase/firestore";
 import Image from "next/image";
+import MaterialsView from "@/components/MaterialsView";
 
 interface StagePageContentProps {
     stageName: string;
@@ -306,14 +307,19 @@ export default function StagePageContent({
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
                         {Object.entries(currentOrder.measurements).map(([key, value]) => (
                             <div key={key} className="bg-gray-50 dark:bg-gray-800 rounded p-2">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">
-                                    {key.replace(/([A-Z])/g, " $1").trim()}
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    {MEASUREMENT_LABELS[key] || key}
                                 </p>
                                 <p className="font-semibold text-gray-900 dark:text-white">{value}</p>
                             </div>
                         ))}
                     </div>
                 </div>
+
+                {/* Materials View (Read-only for non-materials stages) */}
+                {currentOrder.materials && (
+                    <MaterialsView order={currentOrder} />
+                )}
 
                 {/* Custom Stage Content */}
                 {renderStageContent && (
