@@ -2,7 +2,7 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Users, Briefcase, Package, TrendingUp, Settings } from "lucide-react";
+import { Users, Briefcase, Package, TrendingUp, Settings, Ruler } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -51,6 +51,23 @@ export default function AdminPage() {
                                     </h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">
                                         View work logs and manage payments
+                                    </p>
+                                </div>
+                            </div>
+                        </Link>
+
+                        {/* Materials & Inventory */}
+                        <Link href="/admin/materials" className="card hover:shadow-xl transition-all cursor-pointer group">
+                            <div className="flex items-start space-x-4">
+                                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                                    <Ruler className="w-7 h-7 text-white" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                        Materials & Inventory
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        Track materials, lengths, and costs
                                     </p>
                                 </div>
                             </div>

@@ -39,7 +39,7 @@ export default function MaterialsPage() {
 
     const currentOrder = orders[currentIndex];
 
-    const handleCompleteMaterials = async (items: MaterialItem[], totalCost: number) => {
+    const handleCompleteMaterials = async (items: MaterialItem[], totalCost: number, totalLength: number) => {
         if (!currentOrder || !userData) return;
 
         setActionLoading(true);
@@ -54,7 +54,9 @@ export default function MaterialsPage() {
                 materials: {
                     items,
                     totalCost,
+                    totalLength,
                     completedByStaffId: userData.staffId,
+                    completedByStaffName: userData.name,
                     completedAt: Timestamp.now(),
                 },
             });

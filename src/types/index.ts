@@ -79,18 +79,67 @@ export interface OrderBilling {
     billedAt: Timestamp;
 }
 
+// Material Categories
+export type MaterialCategory =
+    | "fabric"
+    | "thread"
+    | "button"
+    | "zipper"
+    | "lining"
+    | "elastic"
+    | "hook"
+    | "lace"
+    | "other";
+
+export const MATERIAL_CATEGORIES: { value: MaterialCategory; label: string }[] = [
+    { value: "fabric", label: "Fabric" },
+    { value: "thread", label: "Thread" },
+    { value: "button", label: "Button" },
+    { value: "zipper", label: "Zipper" },
+    { value: "lining", label: "Lining" },
+    { value: "elastic", label: "Elastic" },
+    { value: "hook", label: "Hook" },
+    { value: "lace", label: "Lace" },
+    { value: "other", label: "Other" },
+];
+
+// Corrected Material Interface for centralized materials collection
+export interface Material {
+    materialId: string;
+    materialName: string;
+    materialCategory: MaterialCategory;
+    colour: string;
+    quantity: number;                    // Number of items or rolls
+    meter: number;                        // Length per quantity (physical length ONLY)
+    totalLength: number;                  // Calculated: quantity × meter
+    costPerMeter: number;                 // Currency only (₹)
+    totalMaterialCost: number;            // Calculated: totalLength × costPerMeter
+    laborStaffId: string;                 // Auto-filled from logged-in user (NOT editable)
+    laborStaffName: string;               // Auto-filled from logged-in user (NOT editable)
+    linkedOrderId: string;                // Order this material is used for
+    createdAt: Timestamp;
+    updatedAt?: Timestamp;
+}
+
+// Legacy MaterialItem for backward compatibility (order-level materials)
 export interface MaterialItem {
     particular: string;
     quantity: number;
     colour: string;
-    meter: number;
-    labour: number;
+    meter: number;                        // Length (NOT cost)
+    costPerMeter: number;                 // Cost per meter (₹)
+    totalLength: number;                  // Calculated: quantity × meter
+    totalCost: number;                    // Calculated: totalLength × costPerMeter
+    laborStaffId: string;                 // Auto-filled
+    laborStaffName: string;               // Auto-filled
 }
 
 export interface OrderMaterials {
     items: MaterialItem[];
     totalCost: number;
+    totalLength: number;
     completedByStaffId: string;
+    completedByStaffName: string;
     completedAt: Timestamp;
 }
 
