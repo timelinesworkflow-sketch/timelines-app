@@ -79,65 +79,87 @@ export interface OrderBilling {
     billedAt: Timestamp;
 }
 
-// Material Categories
-export type MaterialCategory =
-    | "fabric"
-    | "thread"
-    | "button"
-    | "zipper"
-    | "lining"
-    | "elastic"
-    | "hook"
-    | "lace"
-    | "other";
+// ============================================
+// MATERIALS & INVENTORY SYSTEM
+// ============================================
 
-export const MATERIAL_CATEGORIES: { value: MaterialCategory; label: string }[] = [
-    { value: "fabric", label: "Fabric" },
-    { value: "thread", label: "Thread" },
-    { value: "button", label: "Button" },
-    { value: "zipper", label: "Zipper" },
-    { value: "lining", label: "Lining" },
-    { value: "elastic", label: "Elastic" },
-    { value: "hook", label: "Hook" },
-    { value: "lace", label: "Lace" },
-    { value: "other", label: "Other" },
-];
+// Stock Status for inventory checking
+export type StockStatus = "in_stock" | "partial_stock" | "not_in_stock";
 
-// Corrected Material Interface for centralized materials collection
-export interface Material {
-    materialId: string;
+// Planned Material (at Intake Stage - PLANNING ONLY, no inventory reduction)
+export interface PlannedMaterial {
+    materialId: string;          // Material ID / Lining ID
+    materialName: string;        // Material Name
+    category: string;            // Free text category (NOT dropdown)
+    quantity: number;            // Quantity required
+    meter: number;               // Meter (length per quantity)
+    totalLength: number;         // Calculated: quantity × meter
+}
+
+// Order's planned materials from intake
+export interface OrderPlannedMaterials {
+    items: PlannedMaterial[];
+    plannedByStaffId: string;
+    plannedByStaffName: string;
+    plannedAt: Timestamp;
+}
+
+// Inventory Item (Stock in storeroom - EXISTS INDEPENDENTLY OF ORDERS)
+export interface InventoryItem {
+    inventoryId: string;
+    materialId: string;          // Material ID / Lining ID
     materialName: string;
-    materialCategory: MaterialCategory;
-    colour: string;
-    quantity: number;                    // Number of items or rolls
-    meter: number;                        // Length per quantity (physical length ONLY)
-    totalLength: number;                  // Calculated: quantity × meter
-    costPerMeter: number;                 // Currency only (₹)
-    totalMaterialCost: number;            // Calculated: totalLength × costPerMeter
-    laborStaffId: string;                 // Auto-filled from logged-in user (NOT editable)
-    laborStaffName: string;               // Auto-filled from logged-in user (NOT editable)
-    linkedOrderId: string;                // Order this material is used for
+    category: string;            // Free text category
+    totalBoughtLength: number;   // Total meters bought
+    totalUsedLength: number;     // Total meters consumed
+    availableLength: number;     // Calculated: totalBoughtLength - totalUsedLength
+    lastUpdatedAt: Timestamp;
     createdAt: Timestamp;
-    updatedAt?: Timestamp;
 }
 
-// Legacy MaterialItem for backward compatibility (order-level materials)
-export interface MaterialItem {
-    particular: string;
+// Material Purchase (Bulk buying - adds to inventory)
+export interface MaterialPurchase {
+    purchaseId: string;
+    materialId: string;          // Material ID / Lining ID
+    materialName: string;
+    category: string;            // Free text category
+    quantity: number;            // Number of items/rolls bought
+    meter: number;               // Length per quantity
+    totalLength: number;         // Calculated: quantity × meter
+    costPerMeter: number;        // Cost per meter (₹)
+    totalCost: number;           // Calculated: totalLength × costPerMeter
+    supplier?: string;           // Optional supplier name
+    laborStaffId: string;        // Auto-filled (NOT editable)
+    laborStaffName: string;      // Auto-filled (NOT editable)
+    createdAt: Timestamp;
+}
+
+// Material Usage (Consumption from orders - reduces inventory)
+export interface MaterialUsage {
+    usageId: string;
+    orderId: string;
+    materialId: string;          // Material ID / Lining ID
+    materialName: string;
+    category: string;
     quantity: number;
-    colour: string;
-    meter: number;                        // Length (NOT cost)
-    costPerMeter: number;                 // Cost per meter (₹)
-    totalLength: number;                  // Calculated: quantity × meter
-    totalCost: number;                    // Calculated: totalLength × costPerMeter
-    laborStaffId: string;                 // Auto-filled
-    laborStaffName: string;               // Auto-filled
+    meter: number;
+    totalLength: number;         // Calculated: quantity × meter
+    laborStaffId: string;        // Auto-filled (NOT editable)
+    laborStaffName: string;      // Auto-filled (NOT editable)
+    createdAt: Timestamp;
 }
 
+// Material with stock status (for display in materials stage)
+export interface PlannedMaterialWithStatus extends PlannedMaterial {
+    stockStatus: StockStatus;
+    availableLength: number;
+    shortageLength: number;      // How much more is needed
+}
+
+// Order Materials (completed materials stage)
 export interface OrderMaterials {
-    items: MaterialItem[];
-    totalCost: number;
-    totalLength: number;
+    usedItems: MaterialUsage[];  // Actual materials used
+    totalLengthUsed: number;
     completedByStaffId: string;
     completedByStaffName: string;
     completedAt: Timestamp;
@@ -163,7 +185,8 @@ export interface Order {
     materialsCostPlanned: number | null;
     changeHistory: ChangeHistoryEntry[];
     billing?: OrderBilling;
-    materials?: OrderMaterials;
+    plannedMaterials?: OrderPlannedMaterials;  // Materials planned at intake (no inventory reduction)
+    materials?: OrderMaterials;                 // Materials used (after materials stage completion)
 }
 
 export interface TimelineEntry {

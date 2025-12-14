@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order } from "@/types";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, PlannedMaterial } from "@/types";
 import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { uploadImages } from "@/lib/storage";
 import { Timestamp } from "firebase/firestore";
 import { X, Upload, Send, Check } from "lucide-react";
 import Toast from "@/components/Toast";
+import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
 interface CreateOrderFormProps {
     onClose: () => void;
@@ -28,6 +29,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [activeStages, setActiveStages] = useState<string[]>(["materials", "marking", "cutting", "stitching", "ironing", "billing"]);
     const [samplerFiles, setSamplerFiles] = useState<File[]>([]);
     const [particulars, setParticulars] = useState("");
+    const [plannedMaterials, setPlannedMaterials] = useState<PlannedMaterial[]>([]);
     const [loading, setLoading] = useState(false);
 
     // OTP state
@@ -82,6 +84,11 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 return;
             }
 
+            // Filter valid planned materials (non-empty)
+            const validPlannedMaterials = plannedMaterials.filter(
+                m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
+            );
+
             // Create draft order
             const orderData: Partial<Order> = {
                 customerId: `CUST_${Date.now()}`,
@@ -100,6 +107,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 changeHistory: [],
                 confirmedAt: null,
                 finalProductImages: [],
+                // Add planned materials (for materials stage reference)
+                plannedMaterials: validPlannedMaterials.length > 0 ? {
+                    items: validPlannedMaterials,
+                    plannedByStaffId: userData?.staffId || "",
+                    plannedByStaffName: userData?.name || "",
+                    plannedAt: Timestamp.now(),
+                } : undefined,
             };
 
             const orderId = await createOrder(orderData);
@@ -108,10 +122,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             // BYPASS OTP - Directly confirm order for testing
             // TODO: Re-enable OTP when SMS service is configured
             // Future logic: if (otpVerified) { moveToFirstStage(); }
-            
+
             // Get the first active workflow stage after intake
             const firstStage = activeStages[0]; // e.g., "materials", "marking", etc.
-            
+
             await updateOrder(orderId, {
                 confirmedAt: Timestamp.now(),
                 status: "in_progress",
@@ -339,6 +353,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         ))}
                     </div>
                 </div>
+
+                {/* Materials Required - Planning Only */}
+                <PlannedMaterialsInput
+                    initialItems={plannedMaterials}
+                    onChange={setPlannedMaterials}
+                    disabled={loading}
+                />
 
                 {/* Sampler Images */}
                 <div>

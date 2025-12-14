@@ -2,121 +2,197 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Material, MATERIAL_CATEGORIES, MaterialCategory } from "@/types";
-import { getAllMaterials, getMaterialsByDateRange, calculateMaterialsSummary, getDateRanges, MaterialsSummary } from "@/lib/materials";
+import { InventoryItem, MaterialPurchase, MaterialUsage } from "@/types";
+import {
+    getAllInventory,
+    getAllPurchases,
+    getAllUsage,
+    getInventorySummary,
+    getStaffUsageSummary,
+    getDateRanges,
+    InventorySummary,
+    StaffUsageSummary
+} from "@/lib/inventory";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Package, Filter, Calendar, Users, DollarSign, Ruler, TrendingUp, Search, X } from "lucide-react";
+import {
+    Package,
+    Filter,
+    Calendar,
+    Users,
+    DollarSign,
+    Ruler,
+    TrendingUp,
+    Search,
+    X,
+    ShoppingCart,
+    Warehouse,
+    AlertTriangle
+} from "lucide-react";
 
 type DateFilter = "all" | "today" | "week" | "month" | "custom";
+type ViewTab = "inventory" | "purchases" | "usage";
 
 export default function AdminMaterialsPage() {
     const { userData } = useAuth();
-    const [materials, setMaterials] = useState<Material[]>([]);
-    const [filteredMaterials, setFilteredMaterials] = useState<Material[]>([]);
-    const [summary, setSummary] = useState<MaterialsSummary | null>(null);
+    const [activeTab, setActiveTab] = useState<ViewTab>("inventory");
     const [loading, setLoading] = useState(true);
+
+    // Data
+    const [inventory, setInventory] = useState<InventoryItem[]>([]);
+    const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
+    const [usage, setUsage] = useState<MaterialUsage[]>([]);
+    const [summary, setSummary] = useState<InventorySummary | null>(null);
+    const [staffUsage, setStaffUsage] = useState<StaffUsageSummary[]>([]);
 
     // Filters
     const [dateFilter, setDateFilter] = useState<DateFilter>("all");
     const [categoryFilter, setCategoryFilter] = useState<string>("all");
     const [staffFilter, setStaffFilter] = useState<string>("all");
-    const [orderFilter, setOrderFilter] = useState<string>("");
+    const [searchQuery, setSearchQuery] = useState<string>("");
     const [customStartDate, setCustomStartDate] = useState<string>("");
     const [customEndDate, setCustomEndDate] = useState<string>("");
 
-    // Staff list for filter dropdown
+    // Filtered data
+    const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]);
+    const [filteredPurchases, setFilteredPurchases] = useState<MaterialPurchase[]>([]);
+    const [filteredUsage, setFilteredUsage] = useState<MaterialUsage[]>([]);
+
+    // Unique values for filters
+    const [categories, setCategories] = useState<string[]>([]);
     const [staffList, setStaffList] = useState<{ id: string; name: string }[]>([]);
 
     useEffect(() => {
-        loadMaterials();
+        loadAllData();
     }, []);
 
     useEffect(() => {
         applyFilters();
-    }, [materials, dateFilter, categoryFilter, staffFilter, orderFilter, customStartDate, customEndDate]);
+    }, [inventory, purchases, usage, dateFilter, categoryFilter, staffFilter, searchQuery, customStartDate, customEndDate]);
 
-    const loadMaterials = async () => {
+    const loadAllData = async () => {
         try {
-            const data = await getAllMaterials();
-            setMaterials(data);
+            const [inv, pur, use, sum, staff] = await Promise.all([
+                getAllInventory(),
+                getAllPurchases(),
+                getAllUsage(),
+                getInventorySummary(),
+                getStaffUsageSummary(),
+            ]);
+
+            setInventory(inv);
+            setPurchases(pur);
+            setUsage(use);
+            setSummary(sum);
+            setStaffUsage(staff);
+
+            // Extract unique categories
+            const cats = new Set<string>();
+            inv.forEach(i => cats.add(i.category));
+            pur.forEach(p => cats.add(p.category));
+            setCategories(Array.from(cats).filter(c => c));
 
             // Extract unique staff
             const staffMap = new Map<string, string>();
-            data.forEach(m => {
-                if (m.laborStaffId && !staffMap.has(m.laborStaffId)) {
-                    staffMap.set(m.laborStaffId, m.laborStaffName);
-                }
-            });
+            pur.forEach(p => staffMap.set(p.laborStaffId, p.laborStaffName));
+            use.forEach(u => staffMap.set(u.laborStaffId, u.laborStaffName));
             setStaffList(Array.from(staffMap.entries()).map(([id, name]) => ({ id, name })));
         } catch (error) {
-            console.error("Failed to load materials:", error);
+            console.error("Failed to load data:", error);
         } finally {
             setLoading(false);
         }
     };
 
     const applyFilters = () => {
-        let filtered = [...materials];
+        const ranges = getDateRanges();
+        let start: Date | null = null;
+        let end: Date | null = new Date();
 
-        // Date filter
-        if (dateFilter !== "all") {
-            const ranges = getDateRanges();
-            let start: Date | null = null;
-            let end: Date | null = null;
-
-            if (dateFilter === "today") {
-                start = ranges.today.start;
-                end = ranges.today.end;
-            } else if (dateFilter === "week") {
-                start = ranges.thisWeek.start;
-                end = ranges.thisWeek.end;
-            } else if (dateFilter === "month") {
-                start = ranges.thisMonth.start;
-                end = ranges.thisMonth.end;
-            } else if (dateFilter === "custom" && customStartDate && customEndDate) {
-                start = new Date(customStartDate);
-                end = new Date(customEndDate);
-                end.setHours(23, 59, 59);
-            }
-
-            if (start && end) {
-                filtered = filtered.filter(m => {
-                    const date = m.createdAt.toDate();
-                    return date >= start! && date <= end!;
-                });
-            }
+        if (dateFilter === "today") {
+            start = ranges.today.start;
+        } else if (dateFilter === "week") {
+            start = ranges.thisWeek.start;
+        } else if (dateFilter === "month") {
+            start = ranges.thisMonth.start;
+        } else if (dateFilter === "custom" && customStartDate && customEndDate) {
+            start = new Date(customStartDate);
+            end = new Date(customEndDate);
+            end.setHours(23, 59, 59);
         }
 
-        // Category filter
+        // Filter inventory
+        let filtInv = [...inventory];
         if (categoryFilter !== "all") {
-            filtered = filtered.filter(m => m.materialCategory === categoryFilter);
+            filtInv = filtInv.filter(i => i.category === categoryFilter);
         }
-
-        // Staff filter
-        if (staffFilter !== "all") {
-            filtered = filtered.filter(m => m.laborStaffId === staffFilter);
-        }
-
-        // Order ID filter
-        if (orderFilter.trim()) {
-            filtered = filtered.filter(m =>
-                m.linkedOrderId.toLowerCase().includes(orderFilter.toLowerCase())
+        if (searchQuery) {
+            filtInv = filtInv.filter(i =>
+                i.materialId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                i.materialName.toLowerCase().includes(searchQuery.toLowerCase())
             );
         }
+        setFilteredInventory(filtInv);
 
-        setFilteredMaterials(filtered);
-        setSummary(calculateMaterialsSummary(filtered));
+        // Filter purchases
+        let filtPur = [...purchases];
+        if (start && dateFilter !== "all") {
+            filtPur = filtPur.filter(p => {
+                const date = p.createdAt.toDate();
+                return date >= start! && date <= end!;
+            });
+        }
+        if (categoryFilter !== "all") {
+            filtPur = filtPur.filter(p => p.category === categoryFilter);
+        }
+        if (staffFilter !== "all") {
+            filtPur = filtPur.filter(p => p.laborStaffId === staffFilter);
+        }
+        if (searchQuery) {
+            filtPur = filtPur.filter(p =>
+                p.materialId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.materialName.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        }
+        setFilteredPurchases(filtPur);
+
+        // Filter usage
+        let filtUse = [...usage];
+        if (start && dateFilter !== "all") {
+            filtUse = filtUse.filter(u => {
+                const date = u.createdAt.toDate();
+                return date >= start! && date <= end!;
+            });
+        }
+        if (categoryFilter !== "all") {
+            filtUse = filtUse.filter(u => u.category === categoryFilter);
+        }
+        if (staffFilter !== "all") {
+            filtUse = filtUse.filter(u => u.laborStaffId === staffFilter);
+        }
+        if (searchQuery) {
+            filtUse = filtUse.filter(u =>
+                u.materialId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                u.materialName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                u.orderId.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        }
+        setFilteredUsage(filtUse);
     };
 
     const clearFilters = () => {
         setDateFilter("all");
         setCategoryFilter("all");
         setStaffFilter("all");
-        setOrderFilter("");
+        setSearchQuery("");
         setCustomStartDate("");
         setCustomEndDate("");
     };
+
+    // Calculate filtered totals
+    const filteredPurchaseTotal = filteredPurchases.reduce((sum, p) => sum + p.totalCost, 0);
+    const filteredPurchaseLength = filteredPurchases.reduce((sum, p) => sum + p.totalLength, 0);
+    const filteredUsageLength = filteredUsage.reduce((sum, u) => sum + u.totalLength, 0);
 
     if (loading) {
         return (
@@ -146,49 +222,59 @@ export default function AdminMaterialsPage() {
                             </h1>
                         </div>
                         <p className="text-gray-600 dark:text-gray-400">
-                            Track materials, lengths, costs, and staff accountability
+                            Track inventory, purchases, usage, and staff accountability
                         </p>
                     </div>
 
                     {/* Summary Cards */}
                     {summary && (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <div className="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                            <div className="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
                                 <div className="flex items-center space-x-3">
-                                    <DollarSign className="w-10 h-10 text-green-600" />
+                                    <Warehouse className="w-8 h-8 text-blue-600" />
                                     <div>
-                                        <p className="text-xs text-green-600 dark:text-green-400 uppercase font-medium">Total Material Cost</p>
-                                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">₹{summary.totalMaterialCost.toFixed(2)}</p>
+                                        <p className="text-xs text-blue-600 uppercase font-medium">Inventory Items</p>
+                                        <p className="text-xl font-bold text-blue-700">{summary.totalItems}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
+                            <div className="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
                                 <div className="flex items-center space-x-3">
-                                    <Ruler className="w-10 h-10 text-blue-600" />
+                                    <Ruler className="w-8 h-8 text-green-600" />
                                     <div>
-                                        <p className="text-xs text-blue-600 dark:text-blue-400 uppercase font-medium">Total Length Used</p>
-                                        <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{summary.totalLengthUsed.toFixed(2)} m</p>
+                                        <p className="text-xs text-green-600 uppercase font-medium">Available Stock</p>
+                                        <p className="text-xl font-bold text-green-700">{summary.totalAvailableLength.toFixed(1)} m</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-800">
+                            <div className="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20">
                                 <div className="flex items-center space-x-3">
-                                    <TrendingUp className="w-10 h-10 text-purple-600" />
+                                    <TrendingUp className="w-8 h-8 text-purple-600" />
                                     <div>
-                                        <p className="text-xs text-purple-600 dark:text-purple-400 uppercase font-medium">Most Used Material</p>
-                                        <p className="text-lg font-bold text-purple-700 dark:text-purple-300 truncate">{summary.mostUsedMaterial || "N/A"}</p>
+                                        <p className="text-xs text-purple-600 uppercase font-medium">Total Used</p>
+                                        <p className="text-xl font-bold text-purple-700">{summary.totalUsedLength.toFixed(1)} m</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="card bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-800">
+                            <div className="card bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20">
                                 <div className="flex items-center space-x-3">
-                                    <Package className="w-10 h-10 text-orange-600" />
+                                    <DollarSign className="w-8 h-8 text-orange-600" />
                                     <div>
-                                        <p className="text-xs text-orange-600 dark:text-orange-400 uppercase font-medium">Total Entries</p>
-                                        <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">{summary.materialCount}</p>
+                                        <p className="text-xs text-orange-600 uppercase font-medium">Purchase Value</p>
+                                        <p className="text-xl font-bold text-orange-700">₹{summary.totalPurchaseValue.toFixed(0)}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20">
+                                <div className="flex items-center space-x-3">
+                                    <AlertTriangle className="w-8 h-8 text-red-600" />
+                                    <div>
+                                        <p className="text-xs text-red-600 uppercase font-medium">Low Stock</p>
+                                        <p className="text-xl font-bold text-red-700">{summary.lowStockCount}</p>
                                     </div>
                                 </div>
                             </div>
@@ -208,10 +294,10 @@ export default function AdminMaterialsPage() {
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             {/* Date Filter */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
                                     <Calendar className="w-3 h-3 inline mr-1" /> Date
                                 </label>
                                 <select
@@ -227,72 +313,53 @@ export default function AdminMaterialsPage() {
                                 </select>
                             </div>
 
-                            {/* Custom Date Range */}
                             {dateFilter === "custom" && (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
-                                        <input
-                                            type="date"
-                                            value={customStartDate}
-                                            onChange={(e) => setCustomStartDate(e.target.value)}
-                                            className="input text-sm w-full"
-                                        />
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                                        <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="input text-sm w-full" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
-                                        <input
-                                            type="date"
-                                            value={customEndDate}
-                                            onChange={(e) => setCustomEndDate(e.target.value)}
-                                            className="input text-sm w-full"
-                                        />
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
+                                        <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="input text-sm w-full" />
                                     </div>
                                 </>
                             )}
 
                             {/* Category Filter */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Category</label>
-                                <select
-                                    value={categoryFilter}
-                                    onChange={(e) => setCategoryFilter(e.target.value)}
-                                    className="input text-sm w-full"
-                                >
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="input text-sm w-full">
                                     <option value="all">All Categories</option>
-                                    {MATERIAL_CATEGORIES.map(cat => (
-                                        <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
                                     ))}
                                 </select>
                             </div>
 
                             {/* Staff Filter */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                    <Users className="w-3 h-3 inline mr-1" /> Labor (Staff)
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    <Users className="w-3 h-3 inline mr-1" /> Staff
                                 </label>
-                                <select
-                                    value={staffFilter}
-                                    onChange={(e) => setStaffFilter(e.target.value)}
-                                    className="input text-sm w-full"
-                                >
+                                <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className="input text-sm w-full">
                                     <option value="all">All Staff</option>
-                                    {staffList.map(staff => (
-                                        <option key={staff.id} value={staff.id}>{staff.name} ({staff.id})</option>
+                                    {staffList.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Order ID Filter */}
+                            {/* Search */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                    <Search className="w-3 h-3 inline mr-1" /> Order ID
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    <Search className="w-3 h-3 inline mr-1" /> Search
                                 </label>
                                 <input
                                     type="text"
-                                    value={orderFilter}
-                                    onChange={(e) => setOrderFilter(e.target.value)}
-                                    placeholder="Search..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="ID, Name, Order..."
                                     className="input text-sm w-full"
                                 />
                             </div>
@@ -300,20 +367,20 @@ export default function AdminMaterialsPage() {
                     </div>
 
                     {/* Staff-wise Usage */}
-                    {summary && summary.staffWiseUsage.length > 0 && (
+                    {staffUsage.length > 0 && (
                         <div className="card mb-6">
                             <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center space-x-2">
                                 <Users className="w-5 h-5 text-indigo-600" />
                                 <span>Staff-wise Material Usage</span>
                             </h3>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {summary.staffWiseUsage.map((staff) => (
+                                {staffUsage.map((staff) => (
                                     <div key={staff.staffId} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                                         <p className="font-medium text-gray-900 dark:text-white text-sm">{staff.staffName}</p>
                                         <p className="text-xs text-gray-500">{staff.staffId}</p>
                                         <div className="mt-2 flex justify-between text-xs">
-                                            <span className="text-blue-600">{staff.totalLength.toFixed(1)} m</span>
-                                            <span className="text-green-600">₹{staff.totalCost.toFixed(0)}</span>
+                                            <span className="text-blue-600">{staff.totalLength.toFixed(1)} m used</span>
+                                            <span className="text-gray-500">{staff.usageCount} orders</span>
                                         </div>
                                     </div>
                                 ))}
@@ -321,57 +388,148 @@ export default function AdminMaterialsPage() {
                         </div>
                     )}
 
-                    {/* Materials Table */}
-                    <div className="card">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-                            Materials Table ({filteredMaterials.length} entries)
-                        </h3>
-
-                        {filteredMaterials.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">
-                                No materials found matching your filters
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse text-sm">
-                                    <thead>
-                                        <tr className="bg-gray-100 dark:bg-gray-800">
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Material Name</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Category</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Qty</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Meter (Length)</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Length</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">₹/Meter</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Cost</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Labor (Staff)</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Order</th>
-                                            <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredMaterials.map((material) => (
-                                            <tr key={material.materialId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">{material.materialName}</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 capitalize">{material.materialCategory}</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">{material.quantity}</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">{material.meter} m</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-blue-600">{material.totalLength.toFixed(2)} m</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">₹{material.costPerMeter}</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-green-600">₹{material.totalMaterialCost.toFixed(2)}</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-xs">
-                                                    <span className="font-medium">{material.laborStaffName}</span>
-                                                    <br />
-                                                    <span className="text-gray-500">{material.laborStaffId}</span>
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-xs font-mono">{material.linkedOrderId.slice(0, 8)}...</td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-xs">{material.createdAt.toDate().toLocaleDateString()}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                    {/* Tabs */}
+                    <div className="flex space-x-1 mb-4 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit">
+                        <button onClick={() => setActiveTab("inventory")} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "inventory" ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm" : "text-gray-600"}`}>
+                            <Warehouse className="w-4 h-4 inline mr-2" />Inventory ({filteredInventory.length})
+                        </button>
+                        <button onClick={() => setActiveTab("purchases")} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "purchases" ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm" : "text-gray-600"}`}>
+                            <ShoppingCart className="w-4 h-4 inline mr-2" />Purchases ({filteredPurchases.length})
+                        </button>
+                        <button onClick={() => setActiveTab("usage")} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "usage" ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm" : "text-gray-600"}`}>
+                            <TrendingUp className="w-4 h-4 inline mr-2" />Usage ({filteredUsage.length})
+                        </button>
                     </div>
+
+                    {/* Inventory Tab */}
+                    {activeTab === "inventory" && (
+                        <div className="card">
+                            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Current Inventory</h3>
+                            {filteredInventory.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">No inventory items found</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead>
+                                            <tr className="bg-gray-100 dark:bg-gray-800">
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Material ID</th>
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Name</th>
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Category</th>
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Bought</th>
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Used</th>
+                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Available</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredInventory.map((item) => (
+                                                <tr key={item.inventoryId} className={`hover:bg-gray-50 ${item.availableLength < 5 ? 'bg-red-50' : ''}`}>
+                                                    <td className="border border-gray-300 px-3 py-2 font-mono text-xs">{item.materialId}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{item.materialName}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{item.category}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{item.totalBoughtLength.toFixed(2)} m</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{item.totalUsedLength.toFixed(2)} m</td>
+                                                    <td className={`border border-gray-300 px-3 py-2 font-bold ${item.availableLength < 5 ? 'text-red-600' : 'text-green-600'}`}>
+                                                        {item.availableLength.toFixed(2)} m
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Purchases Tab */}
+                    {activeTab === "purchases" && (
+                        <div className="card">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-semibold text-gray-900 dark:text-white">Purchase History</h3>
+                                <div className="text-sm text-gray-600">
+                                    Total: <span className="font-bold text-green-600">₹{filteredPurchaseTotal.toFixed(0)}</span> |
+                                    <span className="font-bold text-blue-600 ml-2">{filteredPurchaseLength.toFixed(1)} m</span>
+                                </div>
+                            </div>
+                            {filteredPurchases.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">No purchases found</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead>
+                                            <tr className="bg-gray-100 dark:bg-gray-800">
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Date</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Material</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Category</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Qty × Meter</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Total Length</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">₹/Meter</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Total Cost</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Staff</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredPurchases.map((p) => (
+                                                <tr key={p.purchaseId} className="hover:bg-gray-50">
+                                                    <td className="border border-gray-300 px-3 py-2 text-xs">{p.createdAt.toDate().toLocaleDateString()}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{p.materialName}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{p.category}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{p.quantity} × {p.meter}m</td>
+                                                    <td className="border border-gray-300 px-3 py-2 font-medium text-blue-600">{p.totalLength.toFixed(2)} m</td>
+                                                    <td className="border border-gray-300 px-3 py-2">₹{p.costPerMeter}</td>
+                                                    <td className="border border-gray-300 px-3 py-2 font-bold text-green-600">₹{p.totalCost.toFixed(0)}</td>
+                                                    <td className="border border-gray-300 px-3 py-2 text-xs">{p.laborStaffName}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Usage Tab */}
+                    {activeTab === "usage" && (
+                        <div className="card">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-semibold text-gray-900 dark:text-white">Usage History</h3>
+                                <div className="text-sm text-gray-600">
+                                    Total Used: <span className="font-bold text-purple-600">{filteredUsageLength.toFixed(1)} m</span>
+                                </div>
+                            </div>
+                            {filteredUsage.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">No usage records found</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead>
+                                            <tr className="bg-gray-100 dark:bg-gray-800">
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Date</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Order ID</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Material</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Category</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Qty × Meter</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Total Length</th>
+                                                <th className="border border-gray-300 px-3 py-2 text-left">Staff</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredUsage.map((u) => (
+                                                <tr key={u.usageId} className="hover:bg-gray-50">
+                                                    <td className="border border-gray-300 px-3 py-2 text-xs">{u.createdAt.toDate().toLocaleDateString()}</td>
+                                                    <td className="border border-gray-300 px-3 py-2 font-mono text-xs">{u.orderId.slice(0, 8)}...</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{u.materialName}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{u.category}</td>
+                                                    <td className="border border-gray-300 px-3 py-2">{u.quantity} × {u.meter}m</td>
+                                                    <td className="border border-gray-300 px-3 py-2 font-medium text-purple-600">{u.totalLength.toFixed(2)} m</td>
+                                                    <td className="border border-gray-300 px-3 py-2 text-xs">{u.laborStaffName}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </ProtectedRoute>
