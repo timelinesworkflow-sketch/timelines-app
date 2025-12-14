@@ -283,17 +283,46 @@ export async function recalculateCustomerTotals(phoneNumber: string): Promise<vo
 
 /**
  * Get all orders for a customer by phone number
+ * NOTE: Fetches ALL orders and filters in memory to avoid composite index requirement
  */
 export async function getOrdersByCustomerPhone(phoneNumber: string): Promise<Order[]> {
-    const ordersRef = collection(db, "orders");
-    const q = query(
-        ordersRef,
-        where("customerPhone", "==", phoneNumber),
-        orderBy("createdAt", "desc")
-    );
-    const snapshot = await getDocs(q);
+    try {
+        const ordersRef = collection(db, "orders");
+        // Simple query without orderBy to avoid composite index requirement
+        const q = query(ordersRef, where("customerPhone", "==", phoneNumber));
+        const snapshot = await getDocs(q);
 
-    return snapshot.docs.map((doc) => doc.data() as Order);
+        const orders = snapshot.docs.map((doc) => doc.data() as Order);
+
+        // Sort in memory by createdAt descending
+        orders.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime;
+        });
+
+        console.log(`Found ${orders.length} orders for phone: ${phoneNumber}`);
+        return orders;
+    } catch (error) {
+        console.error("Error fetching orders by phone:", error);
+        // Fallback: fetch all orders and filter manually
+        try {
+            const ordersRef = collection(db, "orders");
+            const snapshot = await getDocs(ordersRef);
+            const allOrders = snapshot.docs.map((doc) => doc.data() as Order);
+            const filtered = allOrders.filter(o => o.customerPhone === phoneNumber);
+            filtered.sort((a, b) => {
+                const aTime = a.createdAt?.toMillis() || 0;
+                const bTime = b.createdAt?.toMillis() || 0;
+                return bTime - aTime;
+            });
+            console.log(`Fallback: Found ${filtered.length} orders for phone: ${phoneNumber}`);
+            return filtered;
+        } catch (fallbackError) {
+            console.error("Fallback also failed:", fallbackError);
+            return [];
+        }
+    }
 }
 
 /**

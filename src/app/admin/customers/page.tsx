@@ -401,52 +401,104 @@ export default function CustomerManagementPage() {
                                             <div className="animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
                                         </div>
                                     ) : customerOrders.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-500">
-                                            No orders found
+                                        <div className="text-center py-8">
+                                            <Package className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                                            <p className="text-gray-500 font-medium">No orders found for this customer</p>
+                                            <p className="text-sm text-gray-400 mt-1">
+                                                Phone: {selectedCustomer.phoneNumber}
+                                            </p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-3">
+                                        <div className="space-y-4">
                                             {customerOrders.map((order) => (
                                                 <div
                                                     key={order.orderId}
-                                                    className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4"
+                                                    className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
                                                 >
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center space-x-2">
-                                                            <span className="font-mono text-sm text-gray-600">
+                                                    {/* Order Header */}
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center space-x-3">
+                                                            <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
                                                                 #{order.orderId.slice(0, 8)}...
                                                             </span>
                                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
                                                                 {order.status.replace(/_/g, " ")}
                                                             </span>
+                                                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">
+                                                                {order.currentStage}
+                                                            </span>
                                                         </div>
-                                                        <span className="text-sm text-gray-500">
-                                                            Stage: {order.currentStage}
+                                                        <span className="text-sm font-medium text-green-600">
+                                                            {order.price ? `₹${order.price.toLocaleString()}` : '—'}
                                                         </span>
                                                     </div>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+
+                                                    {/* Order Details Grid */}
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
                                                         <div>
-                                                            <p className="text-xs text-gray-500">Garment</p>
-                                                            <p className="capitalize">{order.garmentType.replace(/_/g, " ")}</p>
+                                                            <p className="text-xs text-gray-500 uppercase">Garment</p>
+                                                            <p className="font-medium capitalize">{order.garmentType.replace(/_/g, " ")}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs text-gray-500">Due Date</p>
-                                                            <p>{order.dueDate?.toDate().toLocaleDateString()}</p>
+                                                            <p className="text-xs text-gray-500 uppercase">Intake Date</p>
+                                                            <p className="font-medium">{order.createdAt?.toDate().toLocaleDateString() || '—'}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs text-gray-500">Created</p>
-                                                            <p>{order.createdAt?.toDate().toLocaleDateString()}</p>
+                                                            <p className="text-xs text-gray-500 uppercase">Due Date</p>
+                                                            <p className="font-medium">{order.dueDate?.toDate().toLocaleDateString() || '—'}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs text-gray-500">Price</p>
-                                                            <p className="font-medium text-green-600">
-                                                                {order.price ? `₹${order.price.toLocaleString()}` : '—'}
+                                                            <p className="text-xs text-gray-500 uppercase">Delivery Date</p>
+                                                            <p className="font-medium">
+                                                                {order.deliveredAt?.toDate().toLocaleDateString() ||
+                                                                    (order.status === 'delivered' ? 'Delivered' : 'Pending')}
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    {order.deliveredAt && (
-                                                        <div className="mt-2 text-xs text-blue-600">
-                                                            Delivered: {order.deliveredAt.toDate().toLocaleDateString()}
+
+                                                    {/* Cost Breakdown */}
+                                                    <div className="grid grid-cols-3 gap-3 text-sm bg-white dark:bg-gray-900 rounded p-3">
+                                                        <div>
+                                                            <p className="text-xs text-gray-500">Material Cost</p>
+                                                            <p className="font-medium text-orange-600">
+                                                                ₹{(order.materialCost || 0).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-500">Labour Cost</p>
+                                                            <p className="font-medium text-purple-600">
+                                                                ₹{(order.labourCost || 0).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-500">Advance Paid</p>
+                                                            <p className="font-medium text-green-600">
+                                                                ₹{(order.advanceAmount || 0).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Assigned Staff */}
+                                                    {order.assignedStaff && Object.keys(order.assignedStaff).length > 0 && (
+                                                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                                            <p className="text-xs text-gray-500 uppercase mb-2">Assigned Staff</p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {Object.entries(order.assignedStaff).map(([stage, staffId]) => (
+                                                                    staffId && (
+                                                                        <span key={stage} className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
+                                                                            {stage}: {staffId}
+                                                                        </span>
+                                                                    )
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Design Notes */}
+                                                    {order.designNotes && (
+                                                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                                            <p className="text-xs text-gray-500 uppercase mb-1">Design Notes</p>
+                                                            <p className="text-sm text-gray-700 dark:text-gray-300">{order.designNotes}</p>
                                                         </div>
                                                     )}
                                                 </div>
