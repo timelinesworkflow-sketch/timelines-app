@@ -227,6 +227,8 @@ export interface Customer {
     name: string;                // Customer name
     address?: string;            // Optional address
     totalOrders: number;         // Count of all orders
+    activeOrders: number;        // Count of non-delivered orders
+    deliveredOrders: number;     // Count of delivered orders
     totalRevenue: number;        // Sum of all order prices
     totalExpenses: number;       // Sum of labour + material costs
     totalProfit: number;         // Revenue - Expenses

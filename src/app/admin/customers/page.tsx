@@ -308,18 +308,22 @@ export default function CustomerManagementPage() {
                                                         <span>{customer.phoneNumber}</span>
                                                     </span>
                                                 </div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                                                     <div>
-                                                        <p className="text-xs text-gray-500">Orders</p>
+                                                        <p className="text-xs text-gray-500">Total Orders</p>
                                                         <p className="font-medium text-gray-900 dark:text-white">{customer.totalOrders}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500">Active</p>
+                                                        <p className="font-medium text-yellow-600">{customer.activeOrders || 0}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500">Delivered</p>
+                                                        <p className="font-medium text-blue-600">{customer.deliveredOrders || 0}</p>
                                                     </div>
                                                     <div>
                                                         <p className="text-xs text-gray-500">Revenue</p>
                                                         <p className="font-medium text-green-600">₹{customer.totalRevenue.toLocaleString()}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Expenses</p>
-                                                        <p className="font-medium text-orange-600">₹{customer.totalExpenses.toLocaleString()}</p>
                                                     </div>
                                                     <div>
                                                         <p className="text-xs text-gray-500">Profit</p>

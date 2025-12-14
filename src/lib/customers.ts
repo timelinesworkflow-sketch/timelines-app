@@ -54,6 +54,8 @@ export async function getOrCreateCustomer(
         name: customerName,
         address: customerAddress,
         totalOrders: 0,
+        activeOrders: 0,
+        deliveredOrders: 0,
         totalRevenue: 0,
         totalExpenses: 0,
         totalProfit: 0,
@@ -81,17 +83,109 @@ export async function getCustomerByPhone(phoneNumber: string): Promise<Customer 
 }
 
 /**
- * Get all customers
+ * Get all customers - First try customers collection, if empty, build from orders
  */
 export async function getAllCustomers(): Promise<Customer[]> {
+    // First, try to get from customers collection
     const customersRef = collection(db, "customers");
-    const q = query(customersRef, orderBy("lastOrderDate", "desc"));
-    const snapshot = await getDocs(q);
+    const customerSnapshot = await getDocs(customersRef);
 
-    return snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        phoneNumber: doc.id,
-    })) as Customer[];
+    if (customerSnapshot.docs.length > 0) {
+        return customerSnapshot.docs.map((doc) => ({
+            ...doc.data(),
+            phoneNumber: doc.id,
+        })) as Customer[];
+    }
+
+    // If customers collection is empty, build from orders collection
+    return buildCustomersFromOrders();
+}
+
+/**
+ * Build customer data directly from orders collection
+ * This reads ALL orders and groups them by customerPhone
+ */
+export async function buildCustomersFromOrders(): Promise<Customer[]> {
+    const ordersRef = collection(db, "orders");
+    const snapshot = await getDocs(ordersRef);
+
+    // Group orders by customerPhone
+    const customerMap = new Map<string, {
+        name: string;
+        address?: string;
+        orders: Order[];
+        totalRevenue: number;
+        totalExpenses: number;
+        lastOrderDate: any;
+        createdAt: any;
+    }>();
+
+    snapshot.docs.forEach((doc) => {
+        const order = doc.data() as Order;
+        const phone = order.customerPhone;
+
+        if (!phone) return; // Skip if no phone number
+
+        if (!customerMap.has(phone)) {
+            customerMap.set(phone, {
+                name: order.customerName,
+                address: order.customerAddress,
+                orders: [],
+                totalRevenue: 0,
+                totalExpenses: 0,
+                lastOrderDate: order.createdAt,
+                createdAt: order.createdAt,
+            });
+        }
+
+        const customer = customerMap.get(phone)!;
+        customer.orders.push(order);
+        customer.totalRevenue += order.price || 0;
+        customer.totalExpenses += (order.labourCost || 0) + (order.materialCost || 0) + (order.extraExpenses || 0);
+
+        // Update name if newer order has different name
+        if (order.customerName) {
+            customer.name = order.customerName;
+        }
+
+        // Track latest order date
+        if (order.createdAt && order.createdAt.toMillis() > customer.lastOrderDate?.toMillis()) {
+            customer.lastOrderDate = order.createdAt;
+        }
+
+        // Track earliest order date
+        if (order.createdAt && order.createdAt.toMillis() < customer.createdAt?.toMillis()) {
+            customer.createdAt = order.createdAt;
+        }
+    });
+
+    // Convert map to Customer array
+    const customers: Customer[] = [];
+    customerMap.forEach((data, phoneNumber) => {
+        const deliveredCount = data.orders.filter(o => o.status === "delivered").length;
+        const activeCount = data.orders.length - deliveredCount;
+
+        customers.push({
+            phoneNumber,
+            name: data.name || "Unknown",
+            address: data.address,
+            totalOrders: data.orders.length,
+            activeOrders: activeCount,
+            deliveredOrders: deliveredCount,
+            totalRevenue: data.totalRevenue,
+            totalExpenses: data.totalExpenses,
+            totalProfit: data.totalRevenue - data.totalExpenses,
+            orderIds: data.orders.map(o => o.orderId),
+            lastOrderDate: data.lastOrderDate || Timestamp.now(),
+            createdAt: data.createdAt || Timestamp.now(),
+            updatedAt: Timestamp.now(),
+        });
+    });
+
+    // Sort by lastOrderDate descending
+    customers.sort((a, b) => b.lastOrderDate.toMillis() - a.lastOrderDate.toMillis());
+
+    return customers;
 }
 
 /**
@@ -203,19 +297,14 @@ export async function getOrdersByCustomerPhone(phoneNumber: string): Promise<Ord
 }
 
 /**
- * Check if order can be edited (only in intake stage)
+ * Check if order can be edited
+ * UPDATED: Allow editing ALL orders regardless of status
+ * Only role-based permission matters (handled in UI component)
  */
 export function canEditOrder(order: Order): boolean {
-    // Order can only be edited if it's still in intake or draft stage
-    const editableStages = ["intake", "draft"];
-    const editableStatuses = ["draft", "in_progress"];
-
-    return (
-        editableStages.includes(order.currentStage) &&
-        editableStatuses.includes(order.status) &&
-        order.currentStage !== "cutting" &&
-        order.currentStage !== "materials"
-    );
+    // Allow editing ALL orders - no stage/status restrictions
+    // The UI component handles role-based permissions
+    return order !== null && order !== undefined;
 }
 
 // ============================================
