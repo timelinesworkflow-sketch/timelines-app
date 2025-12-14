@@ -90,6 +90,23 @@ export default function AdminPage() {
                             </div>
                         </Link>
 
+                        {/* Customer Management */}
+                        <Link href="/admin/customers" className="card hover:shadow-xl transition-all cursor-pointer group">
+                            <div className="flex items-start space-x-4">
+                                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                                    <Users className="w-7 h-7 text-white" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                        Customer Management
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        View customer orders & financials
+                                    </p>
+                                </div>
+                            </div>
+                        </Link>
+
                         {/* Reports */}
                         <Link href="/admin/reports" className="card hover:shadow-xl transition-all cursor-pointer group">
                             <div className="flex items-start space-x-4">

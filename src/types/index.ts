@@ -201,6 +201,15 @@ export interface Order {
     billing?: OrderBilling;
     plannedMaterials?: OrderPlannedMaterials;  // Materials planned at intake (no inventory reduction)
     materials?: OrderMaterials;                 // Materials used (after materials stage completion)
+    // Financial fields
+    price?: number;              // Order price charged to customer
+    advanceAmount?: number;      // Advance paid by customer
+    labourCost?: number;         // Total labour cost
+    materialCost?: number;       // Total material cost
+    extraExpenses?: number;      // Additional expenses
+    deliveredAt?: Timestamp;     // When order was delivered
+    designNotes?: string;        // Design/special instructions
+    clothType?: string;          // Type of cloth
 }
 
 export interface TimelineEntry {
@@ -210,6 +219,21 @@ export interface TimelineEntry {
     subStage?: string;
     action: "started" | "completed" | "checked_ok" | "checked_reject";
     timestamp: Timestamp;
+}
+
+// Customer Profile (for grouping orders by phone number)
+export interface Customer {
+    phoneNumber: string;         // Primary key - unique identifier
+    name: string;                // Customer name
+    address?: string;            // Optional address
+    totalOrders: number;         // Count of all orders
+    totalRevenue: number;        // Sum of all order prices
+    totalExpenses: number;       // Sum of labour + material costs
+    totalProfit: number;         // Revenue - Expenses
+    orderIds: string[];          // Array of order IDs
+    lastOrderDate: Timestamp;    // Most recent order date
+    createdAt: Timestamp;        // First order date
+    updatedAt: Timestamp;        // Last update timestamp
 }
 
 export interface StaffWorkLog {

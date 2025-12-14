@@ -3,12 +3,36 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order } from "@/types";
-import { Package, Calendar, User } from "lucide-react";
+import { Order, GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, PlannedMaterial } from "@/types";
+import { updateOrder } from "@/lib/orders";
+import { canEditOrder } from "@/lib/customers";
+import { useAuth } from "@/contexts/AuthContext";
+import { Package, Calendar, User, Phone, Edit, X, Save, AlertCircle, Check, DollarSign } from "lucide-react";
+import { Timestamp } from "firebase/firestore";
+import Toast from "@/components/Toast";
+import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
 export default function OrdersList() {
+    const { userData } = useAuth();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+    // Edit form state
+    const [editCustomerName, setEditCustomerName] = useState("");
+    const [editCustomerPhone, setEditCustomerPhone] = useState("");
+    const [editCustomerAddress, setEditCustomerAddress] = useState("");
+    const [editClothType, setEditClothType] = useState("");
+    const [editDesignNotes, setEditDesignNotes] = useState("");
+    const [editDueDate, setEditDueDate] = useState("");
+    const [editPrice, setEditPrice] = useState<number>(0);
+    const [editAdvanceAmount, setEditAdvanceAmount] = useState<number>(0);
+    const [editMaterialCost, setEditMaterialCost] = useState<number>(0);
+    const [editLabourCost, setEditLabourCost] = useState<number>(0);
+    const [editMeasurements, setEditMeasurements] = useState<Record<string, string>>({});
+    const [editPlannedMaterials, setEditPlannedMaterials] = useState<PlannedMaterial[]>([]);
 
     useEffect(() => {
         loadOrders();
@@ -33,6 +57,100 @@ export default function OrdersList() {
         }
     };
 
+    const canEdit = (order: Order): boolean => {
+        // Only intake and admin can edit
+        if (!userData || !["intake", "admin", "supervisor"].includes(userData.role)) {
+            return false;
+        }
+        return canEditOrder(order);
+    };
+
+    const startEditing = (order: Order) => {
+        setEditingOrder(order);
+        setEditCustomerName(order.customerName);
+        setEditCustomerPhone(order.customerPhone);
+        setEditCustomerAddress(order.customerAddress || "");
+        setEditClothType(order.clothType || "");
+        setEditDesignNotes(order.designNotes || "");
+        setEditDueDate(order.dueDate?.toDate().toISOString().split("T")[0] || "");
+        setEditPrice(order.price || 0);
+        setEditAdvanceAmount(order.advanceAmount || 0);
+        setEditMaterialCost(order.materialCost || 0);
+        setEditLabourCost(order.labourCost || 0);
+        // Convert measurements to string values for the form
+        const measurementsAsStrings: Record<string, string> = {};
+        if (order.measurements) {
+            Object.entries(order.measurements).forEach(([key, value]) => {
+                measurementsAsStrings[key] = String(value || "");
+            });
+        }
+        setEditMeasurements(measurementsAsStrings);
+        setEditPlannedMaterials(order.plannedMaterials?.items || []);
+    };
+
+    const cancelEditing = () => {
+        setEditingOrder(null);
+    };
+
+    const saveChanges = async () => {
+        if (!editingOrder || !userData) return;
+
+        setSaving(true);
+        try {
+            // Filter valid planned materials
+            const validPlannedMaterials = editPlannedMaterials.filter(
+                m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
+            );
+
+            await updateOrder(editingOrder.orderId, {
+                customerName: editCustomerName,
+                customerPhone: editCustomerPhone,
+                customerAddress: editCustomerAddress,
+                clothType: editClothType,
+                designNotes: editDesignNotes,
+                dueDate: Timestamp.fromDate(new Date(editDueDate)),
+                price: editPrice,
+                advanceAmount: editAdvanceAmount,
+                materialCost: editMaterialCost,
+                labourCost: editLabourCost,
+                measurements: editMeasurements,
+                plannedMaterials: validPlannedMaterials.length > 0 ? {
+                    items: validPlannedMaterials,
+                    plannedByStaffId: userData.staffId,
+                    plannedByStaffName: userData.name,
+                    plannedAt: Timestamp.now(),
+                } : editingOrder.plannedMaterials,
+                // Add to change history
+                changeHistory: [
+                    ...(editingOrder.changeHistory || []),
+                    {
+                        changedAt: Timestamp.now(),
+                        changedByStaffId: userData.staffId,
+                        fieldsChanged: ["customerName", "customerPhone", "dueDate", "price", "measurements"],
+                        oldValues: {
+                            customerName: editingOrder.customerName,
+                            price: editingOrder.price,
+                        },
+                        newValues: {
+                            customerName: editCustomerName,
+                            price: editPrice,
+                        },
+                        verifiedByOtp: false,
+                    }
+                ],
+            });
+
+            setToast({ message: "Order updated successfully!", type: "success" });
+            setEditingOrder(null);
+            await loadOrders();
+        } catch (error) {
+            console.error("Failed to update order:", error);
+            setToast({ message: "Failed to update order", type: "error" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center py-12">
@@ -50,8 +168,195 @@ export default function OrdersList() {
         );
     }
 
+    // Edit Modal
+    if (editingOrder) {
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                    {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+                    {/* Modal Header */}
+                    <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <Edit className="w-6 h-6 text-indigo-600" />
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                Edit Order #{editingOrder.orderId.slice(0, 8)}...
+                            </h2>
+                        </div>
+                        <button
+                            onClick={cancelEditing}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {/* Customer Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="label">Customer Name *</label>
+                                <input
+                                    type="text"
+                                    value={editCustomerName}
+                                    onChange={(e) => setEditCustomerName(e.target.value)}
+                                    className="input"
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Phone Number *</label>
+                                <input
+                                    type="tel"
+                                    value={editCustomerPhone}
+                                    onChange={(e) => setEditCustomerPhone(e.target.value.replace(/\D/g, ""))}
+                                    className="input"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="label">Cloth Type</label>
+                                <input
+                                    type="text"
+                                    value={editClothType}
+                                    onChange={(e) => setEditClothType(e.target.value)}
+                                    className="input"
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Due Date *</label>
+                                <input
+                                    type="date"
+                                    value={editDueDate}
+                                    onChange={(e) => setEditDueDate(e.target.value)}
+                                    className="input"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="label">Design Notes</label>
+                            <textarea
+                                value={editDesignNotes}
+                                onChange={(e) => setEditDesignNotes(e.target.value)}
+                                className="input"
+                                rows={2}
+                            />
+                        </div>
+
+                        {/* Pricing */}
+                        <div className="border-t pt-4">
+                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
+                                <DollarSign className="w-5 h-5 text-green-600" />
+                                <span>Pricing & Costs</span>
+                            </h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div>
+                                    <label className="label text-xs">Price (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editPrice || ""}
+                                        onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
+                                        className="input"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label text-xs">Advance (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editAdvanceAmount || ""}
+                                        onChange={(e) => setEditAdvanceAmount(parseFloat(e.target.value) || 0)}
+                                        className="input"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label text-xs">Material Cost (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editMaterialCost || ""}
+                                        onChange={(e) => setEditMaterialCost(parseFloat(e.target.value) || 0)}
+                                        className="input"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label text-xs">Labour Cost (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editLabourCost || ""}
+                                        onChange={(e) => setEditLabourCost(parseFloat(e.target.value) || 0)}
+                                        className="input"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Measurements */}
+                        <div className="border-t pt-4">
+                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Measurements</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {Object.entries(editMeasurements).map(([key, value]) => (
+                                    <div key={key}>
+                                        <label className="label text-xs">{MEASUREMENT_LABELS[key] || key}</label>
+                                        <input
+                                            type="text"
+                                            value={value || ""}
+                                            onChange={(e) => setEditMeasurements({
+                                                ...editMeasurements,
+                                                [key]: e.target.value
+                                            })}
+                                            className="input"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Planned Materials */}
+                        <div className="border-t pt-4">
+                            <PlannedMaterialsInput
+                                initialItems={editPlannedMaterials}
+                                onChange={setEditPlannedMaterials}
+                                disabled={saving}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t dark:border-gray-700 px-6 py-4 flex space-x-3">
+                        <button
+                            onClick={cancelEditing}
+                            className="flex-1 btn btn-outline"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={saveChanges}
+                            disabled={saving}
+                            className="flex-1 btn btn-primary flex items-center justify-center space-x-2"
+                        >
+                            {saving ? (
+                                <>
+                                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                    <span>Saving...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="w-4 h-4" />
+                                    <span>Save Changes</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
             {orders.map((order) => (
                 <div key={order.orderId} className="card hover:shadow-lg transition-shadow">
                     <div className="flex items-start justify-between">
@@ -65,16 +370,21 @@ export default function OrdersList() {
                                         ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                                         : order.status === "otp_sent"
                                             ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                            : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                                            : order.status === "in_progress"
+                                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                                : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
                                         }`}
                                 >
                                     {order.status.replace(/_/g, " ")}
                                 </span>
+                                <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                                    Stage: {order.currentStage}
+                                </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-gray-600 dark:text-gray-400">
                                 <div className="flex items-center space-x-1">
-                                    <User className="w-4 h-4" />
+                                    <Phone className="w-4 h-4" />
                                     <span>{order.customerPhone}</span>
                                 </div>
                                 <div className="flex items-center space-x-1">
@@ -83,10 +393,38 @@ export default function OrdersList() {
                                 </div>
                                 <div className="flex items-center space-x-1">
                                     <Calendar className="w-4 h-4" />
-                                    <span>Due: {order.dueDate.toDate().toLocaleDateString()}</span>
+                                    <span>Due: {order.dueDate?.toDate().toLocaleDateString()}</span>
                                 </div>
+                                {order.price !== undefined && order.price > 0 && (
+                                    <div className="flex items-center space-x-1 text-green-600">
+                                        <DollarSign className="w-4 h-4" />
+                                        <span>₹{order.price}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-2 text-xs text-gray-500">
+                                Created: {order.createdAt?.toDate().toLocaleDateString()}
                             </div>
                         </div>
+
+                        {/* Edit Button */}
+                        {canEdit(order) && (
+                            <button
+                                onClick={() => startEditing(order)}
+                                className="ml-4 p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg flex items-center space-x-1"
+                                title="Edit Order"
+                            >
+                                <Edit className="w-4 h-4" />
+                                <span className="text-sm hidden sm:inline">Edit</span>
+                            </button>
+                        )}
+
+                        {!canEdit(order) && order.currentStage !== "intake" && (
+                            <div className="ml-4 p-2 text-gray-400" title="Cannot edit - Order has moved past intake">
+                                <AlertCircle className="w-4 h-4" />
+                            </div>
+                        )}
                     </div>
                 </div>
             ))}
