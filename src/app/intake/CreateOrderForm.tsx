@@ -107,9 +107,15 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
             // BYPASS OTP - Directly confirm order for testing
             // TODO: Re-enable OTP when SMS service is configured
+            // Future logic: if (otpVerified) { moveToFirstStage(); }
+            
+            // Get the first active workflow stage after intake
+            const firstStage = activeStages[0]; // e.g., "materials", "marking", etc.
+            
             await updateOrder(orderId, {
                 confirmedAt: Timestamp.now(),
-                status: "in_progress"
+                status: "in_progress",
+                currentStage: firstStage, // Move to first active stage immediately
             });
 
             if (userData) {
