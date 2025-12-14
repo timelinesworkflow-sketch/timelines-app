@@ -102,43 +102,53 @@ export default function OrdersList() {
                 m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
             );
 
-            await updateOrder(editingOrder.orderId, {
-                customerName: editCustomerName,
-                customerPhone: editCustomerPhone,
-                customerAddress: editCustomerAddress,
-                clothType: editClothType,
-                designNotes: editDesignNotes,
-                dueDate: Timestamp.fromDate(new Date(editDueDate)),
-                price: editPrice,
-                advanceAmount: editAdvanceAmount,
-                materialCost: editMaterialCost,
-                labourCost: editLabourCost,
-                measurements: editMeasurements,
-                plannedMaterials: validPlannedMaterials.length > 0 ? {
+            // Build update object, filtering out undefined values
+            const updateData: Record<string, any> = {};
+
+            // Only add fields that have actual values (not undefined)
+            if (editCustomerName !== undefined) updateData.customerName = editCustomerName;
+            if (editCustomerPhone !== undefined) updateData.customerPhone = editCustomerPhone;
+            if (editCustomerAddress !== undefined) updateData.customerAddress = editCustomerAddress || "";
+            if (editClothType !== undefined) updateData.clothType = editClothType || "";
+            if (editDesignNotes !== undefined) updateData.designNotes = editDesignNotes || "";
+            if (editDueDate) updateData.dueDate = Timestamp.fromDate(new Date(editDueDate));
+            if (editPrice !== undefined) updateData.price = editPrice || 0;
+            if (editAdvanceAmount !== undefined) updateData.advanceAmount = editAdvanceAmount || 0;
+            if (editMaterialCost !== undefined) updateData.materialCost = editMaterialCost || 0;
+            if (editLabourCost !== undefined) updateData.labourCost = editLabourCost || 0;
+            if (Object.keys(editMeasurements).length > 0) updateData.measurements = editMeasurements;
+
+            // Handle planned materials - only set if there are valid items
+            if (validPlannedMaterials.length > 0) {
+                updateData.plannedMaterials = {
                     items: validPlannedMaterials,
                     plannedByStaffId: userData.staffId,
                     plannedByStaffName: userData.name,
                     plannedAt: Timestamp.now(),
-                } : editingOrder.plannedMaterials,
-                // Add to change history
-                changeHistory: [
-                    ...(editingOrder.changeHistory || []),
-                    {
-                        changedAt: Timestamp.now(),
-                        changedByStaffId: userData.staffId,
-                        fieldsChanged: ["customerName", "customerPhone", "dueDate", "price", "measurements"],
-                        oldValues: {
-                            customerName: editingOrder.customerName,
-                            price: editingOrder.price,
-                        },
-                        newValues: {
-                            customerName: editCustomerName,
-                            price: editPrice,
-                        },
-                        verifiedByOtp: false,
-                    }
-                ],
-            });
+                };
+            }
+            // If no valid materials and there were existing ones, keep the existing ones (don't set at all)
+
+            // Add to change history
+            updateData.changeHistory = [
+                ...(editingOrder.changeHistory || []),
+                {
+                    changedAt: Timestamp.now(),
+                    changedByStaffId: userData.staffId,
+                    fieldsChanged: Object.keys(updateData),
+                    oldValues: {
+                        customerName: editingOrder.customerName || "",
+                        price: editingOrder.price || 0,
+                    },
+                    newValues: {
+                        customerName: editCustomerName || "",
+                        price: editPrice || 0,
+                    },
+                    verifiedByOtp: false,
+                }
+            ];
+
+            await updateOrder(editingOrder.orderId, updateData);
 
             setToast({ message: "Order updated successfully!", type: "success" });
             setEditingOrder(null);
