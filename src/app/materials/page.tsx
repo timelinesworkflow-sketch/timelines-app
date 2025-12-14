@@ -172,8 +172,12 @@ export default function MaterialsPage() {
 
             await logStaffWork({
                 staffId: userData.staffId,
+                firebaseUid: userData.email,
+                email: userData.email,
+                role: userData.role,
                 orderId: currentOrder.orderId,
                 stage: "materials",
+                action: "completed",
             });
 
             setToast({ message: "Materials stage completed!", type: "success" });
