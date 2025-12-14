@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Order, PlannedMaterialWithStatus, MaterialUsage, InventoryItem, MaterialPurchase } from "@/types";
+import { Order, PlannedMaterialWithStatus, MaterialUsage, InventoryItem } from "@/types";
+import { MEASUREMENT_LABELS } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import {
     checkStockStatus,
@@ -26,7 +27,11 @@ import {
     Plus,
     ShoppingCart,
     Warehouse,
-    Eye
+    Eye,
+    FileText,
+    Ruler,
+    X,
+    Shirt
 } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -47,6 +52,9 @@ export default function MaterialsPage() {
     // Inventory state
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
+
+    // View Order Requirements Modal
+    const [showRequirementsModal, setShowRequirementsModal] = useState(false);
 
     // Purchase form state
     const [showPurchaseForm, setShowPurchaseForm] = useState(false);
@@ -97,7 +105,7 @@ export default function MaterialsPage() {
         }
     };
 
-    const loadMaterialsWithStatus = async (plannedItems: any[]) => {
+    const loadMaterialsWithStatus = async (plannedItems: { materialId: string; materialName: string; category: string; quantity: number; meter: number; totalLength: number; }[]) => {
         try {
             const withStatus = await checkStockStatus(plannedItems);
             setMaterialsWithStatus(withStatus);
@@ -231,26 +239,13 @@ export default function MaterialsPage() {
             // Reload data
             await loadInventory();
             if (currentOrder?.plannedMaterials?.items) {
-                await loadMaterialsWithStatus(currentOrder.plannedMaterials.items);
+                await loadMaterialsWithStatus(currentOrder.plannedMaterials.items as PlannedMaterialWithStatus[]);
             }
         } catch (error) {
             console.error("Failed to add purchase:", error);
             setToast({ message: "Failed to add purchase", type: "error" });
         } finally {
             setActionLoading(false);
-        }
-    };
-
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case "in_stock":
-                return <CheckCircle className="w-5 h-5 text-green-600" />;
-            case "partial_stock":
-                return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
-            case "not_in_stock":
-                return <XCircle className="w-5 h-5 text-red-600" />;
-            default:
-                return null;
         }
     };
 
@@ -335,38 +330,71 @@ export default function MaterialsPage() {
                                 </div>
                             ) : (
                                 <div className="card">
-                                    {/* Order Header */}
+                                    {/* Order Header with View Requirements Button */}
                                     <div className="flex items-center justify-between mb-4">
                                         <div>
                                             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                                                 Order #{currentOrder?.customerId}
                                             </h2>
                                             <p className="text-sm text-gray-500">
-                                                {currentIndex + 1} of {orders.length} orders
+                                                {currentIndex + 1} of {orders.length} orders • {currentOrder?.garmentType}
                                             </p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                Due: {currentOrder?.dueDate?.toDate().toLocaleDateString()}
-                                            </p>
-                                            <p className="text-xs text-gray-500 capitalize">
-                                                {currentOrder?.garmentType}
-                                            </p>
+                                        <div className="flex items-center space-x-3">
+                                            <div className="text-right mr-4">
+                                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                    Due: {currentOrder?.dueDate?.toDate().toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            {/* VIEW REQUIREMENTS BUTTON */}
+                                            <button
+                                                onClick={() => setShowRequirementsModal(true)}
+                                                className="btn btn-primary flex items-center space-x-2"
+                                            >
+                                                <FileText className="w-4 h-4" />
+                                                <span>View Order Requirements</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Quick Info Cards */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+                                            <p className="text-xs text-blue-600 uppercase">Customer</p>
+                                            <p className="font-semibold text-blue-800 dark:text-blue-300 truncate">{currentOrder?.customerName}</p>
+                                        </div>
+                                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg px-3 py-2">
+                                            <p className="text-xs text-purple-600 uppercase">Garment</p>
+                                            <p className="font-semibold text-purple-800 dark:text-purple-300 capitalize">{currentOrder?.garmentType}</p>
+                                        </div>
+                                        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-2">
+                                            <p className="text-xs text-orange-600 uppercase">Due Date</p>
+                                            <p className="font-semibold text-orange-800 dark:text-orange-300">{currentOrder?.dueDate?.toDate().toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
+                                            <p className="text-xs text-green-600 uppercase">Materials Planned</p>
+                                            <p className="font-semibold text-green-800 dark:text-green-300">{materialsWithStatus.length} items</p>
                                         </div>
                                     </div>
 
                                     {/* Planned Materials with Stock Status */}
                                     <div className="mb-6">
                                         <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                            <Eye className="w-5 h-5" />
+                                            <Eye className="w-5 h-5 text-indigo-600" />
                                             <span>Materials Required (from Intake)</span>
                                         </h3>
 
                                         {materialsWithStatus.length === 0 ? (
-                                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-center">
-                                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    No materials were planned at intake
-                                                </p>
+                                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                                                <div className="flex items-start space-x-2">
+                                                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <p className="font-medium text-yellow-800 dark:text-yellow-300">No materials planned at intake</p>
+                                                        <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+                                                            Click <strong>&quot;View Order Requirements&quot;</strong> to see measurements and determine what materials are needed.
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         ) : (
                                             <>
@@ -568,6 +596,169 @@ export default function MaterialsPage() {
                                 )}
                             </div>
                         </>
+                    )}
+
+                    {/* ORDER REQUIREMENTS MODAL */}
+                    {showRequirementsModal && currentOrder && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white dark:bg-gray-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                                {/* Modal Header */}
+                                <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                        <FileText className="w-6 h-6 text-indigo-600" />
+                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                            Order Requirements
+                                        </h2>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowRequirementsModal(false)}
+                                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                <div className="p-6 space-y-6">
+                                    {/* Order Info */}
+                                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-gray-500 uppercase">Order ID</p>
+                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.orderId.slice(0, 8)}...</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 uppercase">Customer</p>
+                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.customerName}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 uppercase">Garment Type</p>
+                                                <p className="font-bold text-gray-900 dark:text-white capitalize flex items-center space-x-2">
+                                                    <Shirt className="w-4 h-4 text-indigo-600" />
+                                                    <span>{currentOrder.garmentType}</span>
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 uppercase">Due Date</p>
+                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.dueDate?.toDate().toLocaleDateString()}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* MEASUREMENTS SECTION */}
+                                    <div>
+                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
+                                            <Ruler className="w-5 h-5 text-blue-600" />
+                                            <span>Measurements</span>
+                                        </h3>
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                            {currentOrder.measurements && Object.keys(currentOrder.measurements).length > 0 ? (
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                    {Object.entries(currentOrder.measurements).map(([key, value]) => (
+                                                        <div key={key} className="bg-white dark:bg-gray-800 rounded px-3 py-2 border border-blue-100 dark:border-blue-800">
+                                                            <p className="text-xs text-blue-600 uppercase">{MEASUREMENT_LABELS[key] || key}</p>
+                                                            <p className="font-bold text-blue-800 dark:text-blue-200">{value || "—"}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-500">No measurements recorded</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* PLANNED MATERIALS SECTION */}
+                                    <div>
+                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
+                                            <Package className="w-5 h-5 text-purple-600" />
+                                            <span>Materials Required (Planned at Intake)</span>
+                                        </h3>
+                                        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                                            {currentOrder.plannedMaterials?.items && currentOrder.plannedMaterials.items.length > 0 ? (
+                                                <>
+                                                    <div className="mb-2 text-xs text-purple-600">
+                                                        Planned by: {currentOrder.plannedMaterials.plannedByStaffName} on {currentOrder.plannedMaterials.plannedAt?.toDate().toLocaleDateString()}
+                                                    </div>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse text-sm">
+                                                            <thead>
+                                                                <tr className="bg-purple-100 dark:bg-purple-800/30">
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Material ID</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Name</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Category</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Qty</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Meter</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left font-bold">Total Length</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {currentOrder.plannedMaterials.items.map((item, idx) => (
+                                                                    <tr key={idx} className="bg-white dark:bg-gray-800">
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-mono text-xs">{item.materialId}</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.materialName}</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.category}</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.quantity}</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.meter} m</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-bold text-purple-700">{item.totalLength.toFixed(2)} m</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                            <tfoot>
+                                                                <tr className="bg-purple-100 dark:bg-purple-800/30 font-bold">
+                                                                    <td colSpan={5} className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-right">Total:</td>
+                                                                    <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-purple-800">
+                                                                        {currentOrder.plannedMaterials.items.reduce((sum, i) => sum + i.totalLength, 0).toFixed(2)} m
+                                                                    </td>
+                                                                </tr>
+                                                            </tfoot>
+                                                        </table>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="text-center py-4">
+                                                    <AlertTriangle className="w-8 h-8 mx-auto text-yellow-500 mb-2" />
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                        No materials were planned during intake.
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Use the measurements above to determine required materials.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Sampler Images */}
+                                    {currentOrder.samplerImages && currentOrder.samplerImages.length > 0 && (
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
+                                                <Eye className="w-5 h-5 text-green-600" />
+                                                <span>Reference Images</span>
+                                            </h3>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {currentOrder.samplerImages.map((img, idx) => (
+                                                    <img
+                                                        key={idx}
+                                                        src={img}
+                                                        alt={`Reference ${idx + 1}`}
+                                                        className="w-full h-24 object-cover rounded-lg border"
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Modal Footer */}
+                                <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t dark:border-gray-700 px-6 py-4">
+                                    <button
+                                        onClick={() => setShowRequirementsModal(false)}
+                                        className="w-full btn btn-primary"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {/* Purchase Form Modal */}
