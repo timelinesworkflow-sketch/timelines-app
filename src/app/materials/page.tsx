@@ -170,7 +170,11 @@ export default function MaterialsPage() {
                 action: "completed",
             });
 
-            await logStaffWork(userData.staffId, currentOrder.orderId, "materials");
+            await logStaffWork({
+                staffId: userData.staffId,
+                orderId: currentOrder.orderId,
+                stage: "materials",
+            });
 
             setToast({ message: "Materials stage completed!", type: "success" });
 
@@ -298,8 +302,8 @@ export default function MaterialsPage() {
                         <button
                             onClick={() => setActiveTab("orders")}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === "orders"
-                                    ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
+                                ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
+                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
                                 }`}
                         >
                             <ShoppingCart className="w-4 h-4" />
@@ -308,8 +312,8 @@ export default function MaterialsPage() {
                         <button
                             onClick={() => setActiveTab("inventory")}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === "inventory"
-                                    ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
-                                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
+                                ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
+                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
                                 }`}
                         >
                             <Warehouse className="w-4 h-4" />
