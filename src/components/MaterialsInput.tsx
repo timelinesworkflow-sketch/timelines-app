@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Order, MaterialItem, MATERIAL_CATEGORIES, MaterialCategory } from "@/types";
+import { Order, MaterialItem } from "@/types";
 import { Plus, Trash2, Package } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -13,11 +13,11 @@ interface MaterialsInputProps {
 
 interface MaterialRow {
     particular: string;
-    materialCategory: MaterialCategory;
+    category: string;            // Free text (NOT dropdown)
     quantity: number;
     colour: string;
-    meter: number;           // Length per quantity (NOT cost)
-    costPerMeter: number;    // Cost per meter only (₹)
+    meter: number;               // Length per quantity (NOT cost)
+    costPerMeter: number;        // Cost per meter (₹)
 }
 
 export default function MaterialsInput({ order, onComplete, loading }: MaterialsInputProps) {
@@ -25,20 +25,20 @@ export default function MaterialsInput({ order, onComplete, loading }: Materials
 
     // Initialize with existing materials or one empty row
     const [items, setItems] = useState<MaterialRow[]>(
-        order.materials?.items && order.materials.items.length > 0
-            ? order.materials.items.map(item => ({
-                particular: item.particular,
-                materialCategory: "fabric" as MaterialCategory,
+        order.materials?.usedItems && order.materials.usedItems.length > 0
+            ? order.materials.usedItems.map(item => ({
+                particular: item.materialName || "",
+                category: item.category || "",
                 quantity: item.quantity,
-                colour: item.colour,
+                colour: "",
                 meter: item.meter,
-                costPerMeter: item.costPerMeter || 0,
+                costPerMeter: 0,
             }))
-            : [{ particular: "", materialCategory: "fabric" as MaterialCategory, quantity: 0, colour: "", meter: 0, costPerMeter: 0 }]
+            : [{ particular: "", category: "", quantity: 0, colour: "", meter: 0, costPerMeter: 0 }]
     );
 
     const addRow = () => {
-        setItems([...items, { particular: "", materialCategory: "fabric", quantity: 0, colour: "", meter: 0, costPerMeter: 0 }]);
+        setItems([...items, { particular: "", category: "", quantity: 0, colour: "", meter: 0, costPerMeter: 0 }]);
     };
 
     const removeRow = (index: number) => {
@@ -81,6 +81,7 @@ export default function MaterialsInput({ order, onComplete, loading }: Materials
                     particular: item.particular,
                     quantity: item.quantity,
                     colour: item.colour,
+                    category: item.category,
                     meter: item.meter,
                     costPerMeter: item.costPerMeter,
                     totalLength,
@@ -172,16 +173,15 @@ export default function MaterialsInput({ order, onComplete, loading }: Materials
                                         />
                                     </td>
                                     <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
-                                        <select
-                                            value={item.materialCategory}
-                                            onChange={(e) => updateItem(index, "materialCategory", e.target.value)}
-                                            className="w-full px-1 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
+                                        {/* FREE TEXT input for category - NOT dropdown */}
+                                        <input
+                                            type="text"
+                                            value={item.category}
+                                            onChange={(e) => updateItem(index, "category", e.target.value)}
+                                            className="w-24 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
+                                            placeholder="Fabric"
                                             disabled={loading}
-                                        >
-                                            {MATERIAL_CATEGORIES.map(cat => (
-                                                <option key={cat.value} value={cat.value}>{cat.label}</option>
-                                            ))}
-                                        </select>
+                                        />
                                     </td>
                                     <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                                         <input

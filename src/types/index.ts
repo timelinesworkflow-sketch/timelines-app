@@ -86,6 +86,20 @@ export interface OrderBilling {
 // Stock Status for inventory checking
 export type StockStatus = "in_stock" | "partial_stock" | "not_in_stock";
 
+// MaterialItem (for legacy order materials and form input)
+export interface MaterialItem {
+    particular: string;          // Material name/description
+    quantity: number;            // Number of units
+    colour: string;              // Color specification
+    category: string;            // Free text category (NOT dropdown)
+    meter: number;               // Meter per unit (LENGTH, not cost)
+    costPerMeter: number;        // Cost per meter (₹)
+    totalLength: number;         // Calculated: quantity × meter
+    totalCost: number;           // Calculated: totalLength × costPerMeter
+    laborStaffId: string;        // Auto-filled from logged-in user
+    laborStaffName: string;      // Auto-filled from logged-in user
+}
+
 // Planned Material (at Intake Stage - PLANNING ONLY, no inventory reduction)
 export interface PlannedMaterial {
     materialId: string;          // Material ID / Lining ID
