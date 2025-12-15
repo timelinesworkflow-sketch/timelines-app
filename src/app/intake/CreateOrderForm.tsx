@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, PlannedMaterial } from "@/types";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, PlannedMaterial, OrderItem } from "@/types";
 import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder } from "@/lib/customers";
 import { uploadImages } from "@/lib/storage";
+import { createEmptyItem, computeOverallStatus, calculateItemsTotals } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Send, Check, Search, Clock, Package, User, Phone, AlertCircle } from "lucide-react";
+import { X, Upload, Send, Check, Search, Clock, Package, User, Phone, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Toast from "@/components/Toast";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
@@ -32,6 +33,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [particulars, setParticulars] = useState("");
     const [plannedMaterials, setPlannedMaterials] = useState<PlannedMaterial[]>([]);
     const [loading, setLoading] = useState(false);
+
+    // Multi-item state
+    const [orderItems, setOrderItems] = useState<Partial<OrderItem>[]>([createEmptyItem(1, "blouse")]);
+    const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
 
     // Additional order fields
     const [clothType, setClothType] = useState("");
@@ -143,6 +148,23 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             // Create or update customer profile
             await getOrCreateCustomer(customerPhone, customerName, customerAddress);
 
+            // Prepare items for the order
+            const finalItems = orderItems
+                .filter(item => item.itemName && item.itemName.trim() !== "")
+                .map(item => ({
+                    ...item,
+                    itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    status: "intake" as const,
+                    timeline: [],
+                    handledBy: userData?.staffId || "",
+                    handledByName: userData?.name || "",
+                    deadline: item.deadline || Timestamp.fromDate(new Date(dueDate)),
+                })) as OrderItem[];
+
+            // Compute overall status from items
+            const { totalItems, completedItems, overallStatus } = computeOverallStatus(finalItems);
+            const itemsTotals = calculateItemsTotals(finalItems);
+
             // Create draft order
             const orderData: Partial<Order> = {
                 customerId: `CUST_${Date.now()}`,
@@ -166,8 +188,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 designNotes,
                 price,
                 advanceAmount,
-                materialCost,
-                labourCost,
+                materialCost: itemsTotals.totalMaterialCost || materialCost,
+                labourCost: itemsTotals.totalLabourCost || labourCost,
+                // Multi-item fields
+                items: finalItems,
+                totalItems,
+                completedItems,
+                overallStatus,
                 // Planned materials
                 plannedMaterials: validPlannedMaterials.length > 0 ? {
                     items: validPlannedMaterials,
@@ -555,9 +582,254 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 </div>
 
-                {/* Measurements */}
+                {/* Multi-Item Section */}
+                <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
+                            <Package className="w-5 h-5 text-indigo-600" />
+                            <span>Order Items ({orderItems.length})</span>
+                        </h3>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const newItem = createEmptyItem(orderItems.length + 1, garmentType);
+                                newItem.deadline = Timestamp.fromDate(new Date(dueDate || Date.now()));
+                                setOrderItems([...orderItems, newItem]);
+                                setExpandedItems(new Set([...expandedItems, orderItems.length]));
+                            }}
+                            className="btn btn-outline text-sm flex items-center space-x-1"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span>Add Item</span>
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {orderItems.map((item, index) => (
+                            <div
+                                key={item.itemId || index}
+                                className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                            >
+                                {/* Item Header */}
+                                <div
+                                    className="bg-gray-50 dark:bg-gray-800 px-4 py-3 flex items-center justify-between cursor-pointer"
+                                    onClick={() => {
+                                        const newExpanded = new Set(expandedItems);
+                                        if (newExpanded.has(index)) {
+                                            newExpanded.delete(index);
+                                        } else {
+                                            newExpanded.add(index);
+                                        }
+                                        setExpandedItems(newExpanded);
+                                    }}
+                                >
+                                    <div className="flex items-center space-x-3">
+                                        <span className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center text-sm font-bold">
+                                            {index + 1}
+                                        </span>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">
+                                                {item.itemName || `Item ${index + 1}`}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                {item.garmentType?.replace(/_/g, " ") || garmentType.replace(/_/g, " ")} • Qty: {item.quantity || 1}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        {orderItems.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const newItems = orderItems.filter((_, i) => i !== index);
+                                                    setOrderItems(newItems);
+                                                }}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        {expandedItems.has(index) ? (
+                                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                                        ) : (
+                                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Item Details (Collapsible) */}
+                                {expandedItems.has(index) && (
+                                    <div className="p-4 space-y-4 bg-white dark:bg-gray-900">
+                                        {/* Row 1: Name, Type, Quantity */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="label text-xs">Item Name *</label>
+                                                <input
+                                                    type="text"
+                                                    value={item.itemName || ""}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = { ...newItems[index], itemName: e.target.value };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                    placeholder="e.g., Blouse, Chudidar"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="label text-xs">Garment Type</label>
+                                                <select
+                                                    value={item.garmentType || garmentType}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = { ...newItems[index], garmentType: e.target.value as GarmentType };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                >
+                                                    <option value="blouse">Blouse</option>
+                                                    <option value="chudi">Chudi</option>
+                                                    <option value="frock">Frock</option>
+                                                    <option value="pavadai_sattai">Pavadai Sattai</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="label text-xs">Quantity</label>
+                                                <input
+                                                    type="number"
+                                                    value={item.quantity || 1}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = { ...newItems[index], quantity: parseInt(e.target.value) || 1 };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                    min="1"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Row 2: Costs and Deadline */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="label text-xs">Material Cost (₹)</label>
+                                                <input
+                                                    type="number"
+                                                    value={item.materialCost || ""}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = { ...newItems[index], materialCost: parseFloat(e.target.value) || 0 };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                    placeholder="0"
+                                                    min="0"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="label text-xs">Labour Cost (₹)</label>
+                                                <input
+                                                    type="number"
+                                                    value={item.labourCost || ""}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = { ...newItems[index], labourCost: parseFloat(e.target.value) || 0 };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                    placeholder="0"
+                                                    min="0"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="label text-xs">Deadline</label>
+                                                <input
+                                                    type="date"
+                                                    value={item.deadline instanceof Timestamp
+                                                        ? item.deadline.toDate().toISOString().split("T")[0]
+                                                        : dueDate || new Date().toISOString().split("T")[0]}
+                                                    onChange={(e) => {
+                                                        const newItems = [...orderItems];
+                                                        newItems[index] = {
+                                                            ...newItems[index],
+                                                            deadline: Timestamp.fromDate(new Date(e.target.value))
+                                                        };
+                                                        setOrderItems(newItems);
+                                                    }}
+                                                    className="input"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Design Notes */}
+                                        <div>
+                                            <label className="label text-xs">Design Notes</label>
+                                            <textarea
+                                                value={item.designNotes || ""}
+                                                onChange={(e) => {
+                                                    const newItems = [...orderItems];
+                                                    newItems[index] = { ...newItems[index], designNotes: e.target.value };
+                                                    setOrderItems(newItems);
+                                                }}
+                                                className="input"
+                                                rows={2}
+                                                placeholder="Special instructions, design requirements..."
+                                            />
+                                        </div>
+
+                                        {/* Item Measurements */}
+                                        <div>
+                                            <label className="label text-xs mb-2">Item Measurements</label>
+                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                                {MEASUREMENT_FIELDS[item.garmentType || garmentType]?.map((field) => (
+                                                    <div key={field}>
+                                                        <label className="text-xs text-gray-500">
+                                                            {MEASUREMENT_LABELS[field] || field}
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={item.measurements?.[field] || ""}
+                                                            onChange={(e) => {
+                                                                const newItems = [...orderItems];
+                                                                newItems[index] = {
+                                                                    ...newItems[index],
+                                                                    measurements: {
+                                                                        ...(newItems[index].measurements || {}),
+                                                                        [field]: e.target.value
+                                                                    }
+                                                                };
+                                                                setOrderItems(newItems);
+                                                            }}
+                                                            className="input text-sm"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Items Summary */}
+                    {orderItems.length > 0 && (
+                        <div className="mt-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
+                            <p className="text-sm text-indigo-700 dark:text-indigo-300">
+                                <strong>{orderItems.length}</strong> item(s) •
+                                Total Material: <strong>₹{orderItems.reduce((sum, i) => sum + (i.materialCost || 0), 0).toLocaleString()}</strong> •
+                                Total Labour: <strong>₹{orderItems.reduce((sum, i) => sum + (i.labourCost || 0), 0).toLocaleString()}</strong>
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Legacy Measurements (for order-level, kept for backwards compatibility) */}
                 <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Measurements</h3>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Order-Level Measurements (Optional)</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {MEASUREMENT_FIELDS[garmentType].map((field) => (
                             <div key={field}>

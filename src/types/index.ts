@@ -179,6 +179,49 @@ export interface OrderMaterials {
     completedAt: Timestamp;
 }
 
+// ============================================
+// MULTI-ITEM WORKFLOW TYPES
+// ============================================
+
+// Item status for workflow progression
+export type ItemStatus =
+    | "intake"
+    | "cutting"
+    | "stitching"
+    | "finishing"
+    | "qc"
+    | "ready"
+    | "delivered";
+
+// Timeline entry for tracking item progress through stages
+export interface ItemTimelineEntry {
+    stage: string;
+    completedBy: string;       // userId
+    completedByName?: string;  // Staff name
+    completedAt: Timestamp;
+}
+
+// Individual item within an order
+export interface OrderItem {
+    itemId: string;
+    itemName: string;           // e.g., "Blouse", "Chudidar", "Lehenga"
+    quantity: number;
+    measurements: { [key: string]: number | string };
+    designNotes: string;
+    referenceImages: string[];
+    materialCost: number;
+    labourCost: number;
+    deadline: Timestamp;
+    status: ItemStatus;
+    handledBy: string;          // Current handler userId
+    handledByName?: string;     // Current handler name
+    timeline: ItemTimelineEntry[];
+    garmentType?: GarmentType;
+}
+
+// Overall order status based on item completion
+export type OverallOrderStatus = "inProgress" | "partial" | "completed" | "delivered";
+
 export interface Order {
     orderId: string;
     customerId: string;
@@ -199,17 +242,22 @@ export interface Order {
     materialsCostPlanned: number | null;
     changeHistory: ChangeHistoryEntry[];
     billing?: OrderBilling;
-    plannedMaterials?: OrderPlannedMaterials;  // Materials planned at intake (no inventory reduction)
-    materials?: OrderMaterials;                 // Materials used (after materials stage completion)
+    plannedMaterials?: OrderPlannedMaterials;
+    materials?: OrderMaterials;
     // Financial fields
-    price?: number;              // Order price charged to customer
-    advanceAmount?: number;      // Advance paid by customer
-    labourCost?: number;         // Total labour cost
-    materialCost?: number;       // Total material cost
-    extraExpenses?: number;      // Additional expenses
-    deliveredAt?: Timestamp;     // When order was delivered
-    designNotes?: string;        // Design/special instructions
-    clothType?: string;          // Type of cloth
+    price?: number;
+    advanceAmount?: number;
+    labourCost?: number;
+    materialCost?: number;
+    extraExpenses?: number;
+    deliveredAt?: Timestamp;
+    designNotes?: string;
+    clothType?: string;
+    // Multi-item fields
+    items?: OrderItem[];         // Array of items in this order
+    totalItems?: number;         // Computed: items.length
+    completedItems?: number;     // Computed: items where status = "ready" or "delivered"
+    overallStatus?: OverallOrderStatus;  // Computed from item statuses
 }
 
 export interface TimelineEntry {

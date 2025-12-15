@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order, MEASUREMENT_LABELS } from "@/types";
+import { Order, OrderItem, MEASUREMENT_LABELS } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
-import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye } from "lucide-react";
+import { canViewCustomerInfo, getCustomerDisplayName } from "@/lib/privacy";
+import { formatOrderProgress, ITEM_STAGES } from "@/lib/orderItems";
+import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp } from "lucide-react";
 import Toast from "@/components/Toast";
 import { Timestamp } from "firebase/firestore";
 import Image from "next/image";
@@ -41,6 +43,10 @@ export default function StagePageContent({
     const [actionLoading, setActionLoading] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
     const [showImageModal, setShowImageModal] = useState<string | null>(null);
+    const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
+
+    // Privacy control - check if user can see customer info
+    const canSeeCustomer = userData ? canViewCustomerInfo(userData.role) : false;
 
     useEffect(() => {
         loadOrders();
@@ -246,10 +252,17 @@ export default function StagePageContent({
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                            Order #{currentOrder.customerId}
+                            {canSeeCustomer
+                                ? `Order - ${currentOrder.customerName}`
+                                : `Order #${currentOrder.orderId.slice(0, 8)}`}
                         </h2>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                             {currentIndex + 1} of {orders.length} orders
+                            {currentOrder.items && currentOrder.items.length > 0 && (
+                                <span className="ml-2 text-indigo-600">
+                                    • {formatOrderProgress(currentOrder)}
+                                </span>
+                            )}
                         </p>
                     </div>
                     <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-medium capitalize">
@@ -257,7 +270,7 @@ export default function StagePageContent({
                     </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                     <div>
                         <p className="text-xs text-gray-600 dark:text-gray-400">Due Date</p>
                         <p className="font-semibold text-gray-900 dark:text-white">
@@ -270,6 +283,14 @@ export default function StagePageContent({
                             {currentOrder.orderId.slice(0, 8)}...
                         </p>
                     </div>
+                    {currentOrder.items && currentOrder.items.length > 0 && (
+                        <div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">Items</p>
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                                {currentOrder.totalItems || currentOrder.items.length} items
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Reference Images */}
@@ -315,6 +336,71 @@ export default function StagePageContent({
                         ))}
                     </div>
                 </div>
+
+                {/* Multi-Item Section */}
+                {currentOrder.items && currentOrder.items.length > 0 && (
+                    <div className="mt-4 border-t pt-4">
+                        <div className="flex items-center space-x-2 mb-3">
+                            <Package className="w-5 h-5 text-indigo-600" />
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Order Items ({currentOrder.items.length})
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            {currentOrder.items.map((item: OrderItem, idx: number) => (
+                                <div
+                                    key={item.itemId}
+                                    className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                            <span className="w-7 h-7 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">
+                                                {idx + 1}
+                                            </span>
+                                            <div>
+                                                <p className="font-medium text-gray-900 dark:text-white text-sm">
+                                                    {item.itemName || `Item ${idx + 1}`}
+                                                </p>
+                                                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                                    <span className="capitalize">{item.garmentType?.replace(/_/g, " ")}</span>
+                                                    <span>•</span>
+                                                    <span>Qty: {item.quantity}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${item.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
+                                                    item.status === 'ready' ? 'bg-green-100 text-green-700' :
+                                                        item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
+                                                            'bg-yellow-100 text-yellow-700'
+                                                }`}>
+                                                {item.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Item measurements preview */}
+                                    {item.measurements && Object.keys(item.measurements).length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                            {Object.entries(item.measurements).slice(0, 4).map(([key, value]) => (
+                                                <span key={key} className="bg-white dark:bg-gray-700 px-2 py-1 rounded">
+                                                    {MEASUREMENT_LABELS[key] || key}: {value}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Design notes */}
+                                    {item.designNotes && (
+                                        <p className="mt-2 text-xs text-gray-500 italic">
+                                            Note: {item.designNotes}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Materials View (Read-only for non-materials stages) */}
                 {currentOrder.materials && (
