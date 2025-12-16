@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Order, PlannedMaterialWithStatus, MaterialUsage, InventoryItem } from "@/types";
+import { Order, PlannedMaterial, PlannedMaterialWithStatus, MaterialUsage, InventoryItem } from "@/types";
 import { MEASUREMENT_LABELS } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import {
@@ -105,7 +105,7 @@ export default function MaterialsPage() {
         }
     };
 
-    const loadMaterialsWithStatus = async (plannedItems: { materialId: string; materialName: string; category: string; quantity: number; meter: number; totalLength: number; }[]) => {
+    const loadMaterialsWithStatus = async (plannedItems: PlannedMaterial[]) => {
         try {
             const withStatus = await checkStockStatus(plannedItems);
             setMaterialsWithStatus(withStatus);
@@ -135,9 +135,9 @@ export default function MaterialsPage() {
                     orderId: currentOrder.orderId,
                     materialId: material.materialId,
                     materialName: material.materialName,
-                    category: material.category,
-                    quantity: material.quantity,
-                    meter: material.meter,
+                    category: "",
+                    quantity: 1,
+                    meter: material.measurement,
                     laborStaffId: userData.staffId,
                     laborStaffName: userData.name,
                 });
@@ -146,10 +146,10 @@ export default function MaterialsPage() {
                     orderId: currentOrder.orderId,
                     materialId: material.materialId,
                     materialName: material.materialName,
-                    category: material.category,
-                    quantity: material.quantity,
-                    meter: material.meter,
-                    totalLength: material.totalLength,
+                    category: "",
+                    quantity: 1,
+                    meter: material.measurement,
+                    totalLength: material.measurement,
                     laborStaffId: userData.staffId,
                     laborStaffName: userData.name,
                     createdAt: Timestamp.now(),
@@ -164,7 +164,7 @@ export default function MaterialsPage() {
                 status: nextStage ? "in_progress" : "completed",
                 materials: {
                     usedItems: usageItems,
-                    totalLengthUsed: materialsWithStatus.reduce((sum, m) => sum + m.totalLength, 0),
+                    totalLengthUsed: materialsWithStatus.reduce((sum, m) => sum + m.measurement, 0),
                     completedByStaffId: userData.staffId,
                     completedByStaffName: userData.name,
                     completedAt: Timestamp.now(),
@@ -433,10 +433,10 @@ export default function MaterialsPage() {
                                                                         {material.materialName}
                                                                     </td>
                                                                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                                        {material.category}
+                                                                        {material.colour || "-"}
                                                                     </td>
                                                                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium">
-                                                                        {material.totalLength.toFixed(2)} m
+                                                                        {material.measurement.toFixed(2)} {material.unit}
                                                                     </td>
                                                                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
                                                                         {material.availableLength.toFixed(2)} m
@@ -684,10 +684,8 @@ export default function MaterialsPage() {
                                                                 <tr className="bg-purple-100 dark:bg-purple-800/30">
                                                                     <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Material ID</th>
                                                                     <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Name</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Category</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Qty</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Meter</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left font-bold">Total Length</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Colour</th>
+                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left font-bold">Measurement</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -695,18 +693,16 @@ export default function MaterialsPage() {
                                                                     <tr key={idx} className="bg-white dark:bg-gray-800">
                                                                         <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-mono text-xs">{item.materialId}</td>
                                                                         <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.materialName}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.category}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.quantity}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.meter} m</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-bold text-purple-700">{item.totalLength.toFixed(2)} m</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.colour || "-"}</td>
+                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-bold text-purple-700">{item.measurement} {item.unit}</td>
                                                                     </tr>
                                                                 ))}
                                                             </tbody>
                                                             <tfoot>
                                                                 <tr className="bg-purple-100 dark:bg-purple-800/30 font-bold">
-                                                                    <td colSpan={5} className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-right">Total:</td>
+                                                                    <td colSpan={3} className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-right">Total:</td>
                                                                     <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-purple-800">
-                                                                        {currentOrder.plannedMaterials.items.reduce((sum, i) => sum + i.totalLength, 0).toFixed(2)} m
+                                                                        {currentOrder.plannedMaterials.items.reduce((sum, i) => sum + i.measurement, 0).toFixed(2)}
                                                                     </td>
                                                                 </tr>
                                                             </tfoot>

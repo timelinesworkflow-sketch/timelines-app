@@ -94,7 +94,7 @@ export async function checkStockStatus(
     return plannedMaterials.map((planned) => {
         const stock = inventoryMap.get(planned.materialId);
         const availableLength = stock?.availableLength || 0;
-        const requiredLength = planned.totalLength;
+        const requiredLength = planned.measurement;
 
         let stockStatus: StockStatus;
         let shortageLength = 0;

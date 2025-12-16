@@ -100,14 +100,16 @@ export interface MaterialItem {
     laborStaffName: string;      // Auto-filled from logged-in user
 }
 
+// Material measurement unit type
+export type MaterialUnit = "Meter" | "Gram" | "Packet";
+
 // Planned Material (at Intake Stage - PLANNING ONLY, no inventory reduction)
 export interface PlannedMaterial {
     materialId: string;          // Material ID / Lining ID
     materialName: string;        // Material Name
-    category: string;            // Free text category (NOT dropdown)
-    quantity: number;            // Quantity required
-    meter: number;               // Meter (length per quantity)
-    totalLength: number;         // Calculated: quantity × meter
+    colour: string;              // Color specification
+    measurement: number;         // Value in selected unit
+    unit: MaterialUnit;          // Selected unit (Meter/Gram/Packet)
 }
 
 // Order's planned materials from intake

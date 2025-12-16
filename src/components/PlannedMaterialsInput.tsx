@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { PlannedMaterial } from "@/types";
-import { Plus, Trash2, Package, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { PlannedMaterial, MaterialUnit } from "@/types";
+import { Plus, Trash2, Package, AlertCircle, ChevronDown } from "lucide-react";
 
 interface PlannedMaterialsInputProps {
     initialItems?: PlannedMaterial[];
@@ -20,17 +20,37 @@ export default function PlannedMaterialsInput({
             ? initialItems
             : [createEmptyItem()]
     );
+    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("Meter");
+    const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLTableCellElement>(null);
 
     function createEmptyItem(): PlannedMaterial {
         return {
             materialId: "",
             materialName: "",
-            category: "",
-            quantity: 0,
-            meter: 0,
-            totalLength: 0,
+            colour: "",
+            measurement: 0,
+            unit: selectedUnit,
         };
     }
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowUnitDropdown(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Update all items' unit when selectedUnit changes
+    useEffect(() => {
+        const updatedItems = items.map(item => ({ ...item, unit: selectedUnit }));
+        setItems(updatedItems);
+        onChange(updatedItems);
+    }, [selectedUnit]);
 
     const addRow = () => {
         const newItems = [...items, createEmptyItem()];
@@ -49,14 +69,13 @@ export default function PlannedMaterialsInput({
     const updateItem = (index: number, field: keyof PlannedMaterial, value: string | number) => {
         const newItems = [...items];
         newItems[index] = { ...newItems[index], [field]: value };
-
-        // Auto-calculate total length
-        if (field === "quantity" || field === "meter") {
-            newItems[index].totalLength = newItems[index].quantity * newItems[index].meter;
-        }
-
         setItems(newItems);
         onChange(newItems);
+    };
+
+    const handleUnitSelect = (unit: MaterialUnit) => {
+        setSelectedUnit(unit);
+        setShowUnitDropdown(false);
     };
 
     return (
@@ -99,16 +118,35 @@ export default function PlannedMaterialsInput({
                                 Material Name
                             </th>
                             <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white">
-                                Category
+                                Colour
                             </th>
-                            <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white">
-                                Qty
-                            </th>
-                            <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white">
-                                Meter
-                            </th>
-                            <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700">
-                                Total Length
+                            <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white relative" ref={dropdownRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUnitDropdown(!showUnitDropdown)}
+                                    className="flex items-center space-x-1 hover:text-indigo-600 transition-colors"
+                                    disabled={disabled}
+                                >
+                                    <span>{selectedUnit}</span>
+                                    <ChevronDown className="w-4 h-4" />
+                                </button>
+                                {showUnitDropdown && (
+                                    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10 min-w-[120px]">
+                                        {(["Meter", "Gram", "Packet"] as MaterialUnit[]).map((unit) => (
+                                            <button
+                                                key={unit}
+                                                type="button"
+                                                onClick={() => handleUnitSelect(unit)}
+                                                className={`w-full px-4 py-2 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-sm ${selectedUnit === unit
+                                                    ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium"
+                                                    : "text-gray-700 dark:text-gray-300"
+                                                    }`}
+                                            >
+                                                {unit}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </th>
                             <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center w-12">
                                 ✕
@@ -141,39 +179,24 @@ export default function PlannedMaterialsInput({
                                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                                     <input
                                         type="text"
-                                        value={item.category}
-                                        onChange={(e) => updateItem(index, "category", e.target.value)}
+                                        value={item.colour}
+                                        onChange={(e) => updateItem(index, "colour", e.target.value)}
                                         className="w-24 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
-                                        placeholder="Fabric"
+                                        placeholder="Red"
                                         disabled={disabled}
                                     />
                                 </td>
                                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                                     <input
                                         type="number"
-                                        value={item.quantity || ""}
-                                        onChange={(e) => updateItem(index, "quantity", parseFloat(e.target.value) || 0)}
-                                        className="w-16 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
-                                        placeholder="0"
-                                        min="0"
-                                        step="1"
-                                        disabled={disabled}
-                                    />
-                                </td>
-                                <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
-                                    <input
-                                        type="number"
-                                        value={item.meter || ""}
-                                        onChange={(e) => updateItem(index, "meter", parseFloat(e.target.value) || 0)}
-                                        className="w-20 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
+                                        value={item.measurement || ""}
+                                        onChange={(e) => updateItem(index, "measurement", parseFloat(e.target.value) || 0)}
+                                        className="w-24 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded"
                                         placeholder="0"
                                         min="0"
                                         step="0.1"
                                         disabled={disabled}
                                     />
-                                </td>
-                                <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-center font-medium">
-                                    {item.totalLength.toFixed(2)} m
                                 </td>
                                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1 text-center">
                                     <button
@@ -190,16 +213,6 @@ export default function PlannedMaterialsInput({
                         ))}
                     </tbody>
                 </table>
-            </div>
-
-            {/* Total */}
-            <div className="mt-3 text-right">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                    Total Planned Length:{" "}
-                    <strong className="text-indigo-600 dark:text-indigo-400">
-                        {items.reduce((sum, i) => sum + i.totalLength, 0).toFixed(2)} m
-                    </strong>
-                </span>
             </div>
         </div>
     );

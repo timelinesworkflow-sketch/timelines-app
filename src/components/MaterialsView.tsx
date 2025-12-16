@@ -118,10 +118,8 @@ export default function MaterialsView({ order }: MaterialsViewProps) {
                             <tr className="bg-gray-100 dark:bg-gray-800">
                                 <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Material ID</th>
                                 <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Name</th>
-                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Category</th>
-                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Qty</th>
-                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Meter</th>
-                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left bg-indigo-50 dark:bg-indigo-900/20">Total Length</th>
+                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Colour</th>
+                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left bg-indigo-50 dark:bg-indigo-900/20">Measurement</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -134,27 +132,21 @@ export default function MaterialsView({ order }: MaterialsViewProps) {
                                         {item.materialName}
                                     </td>
                                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                        {item.category}
-                                    </td>
-                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                        {item.quantity}
-                                    </td>
-                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                        {item.meter?.toFixed(2)} m
+                                        {item.colour || "-"}
                                     </td>
                                     <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-bold text-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/10">
-                                        {item.totalLength?.toFixed(2)} m
+                                        {item.measurement} {item.unit}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                         <tfoot>
                             <tr className="bg-gray-100 dark:bg-gray-800 font-bold">
-                                <td colSpan={5} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-right">
-                                    Total Planned:
+                                <td colSpan={3} className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-right">
+                                    Total:
                                 </td>
                                 <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-indigo-700 bg-indigo-100">
-                                    {order.plannedMaterials.items.reduce((sum, i) => sum + (i.totalLength || 0), 0).toFixed(2)} m
+                                    {order.plannedMaterials.items.reduce((sum, i) => sum + (i.measurement || 0), 0).toFixed(2)}
                                 </td>
                             </tr>
                         </tfoot>
