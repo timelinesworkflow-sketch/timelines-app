@@ -18,7 +18,7 @@ interface CreateOrderFormProps {
 
 export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const { userData } = useAuth();
-    const [step, setStep] = useState<"form" | "review" | "otp">("form");
+    const [step, setStep] = useState<"form" | "success">("form");
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
     // Form state
@@ -51,8 +51,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
     const [showOrderHistory, setShowOrderHistory] = useState(false);
 
-    // OTP state
-    const [inputOTP, setInputOTP] = useState("");
+    // Temp order ID for tracking
     const [tempOrderId, setTempOrderId] = useState("");
 
     useEffect(() => {
@@ -251,40 +250,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         }
     };
 
-    const handleVerifyOTP = async () => {
-        setLoading(true);
-
-        try {
-            const verifyResponse = await fetch("/api/verify-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ orderId: tempOrderId, otp: inputOTP })
-            });
-
-            const verifyData = await verifyResponse.json();
-
-            if (!verifyResponse.ok) {
-                setToast({ message: verifyData.error || "Invalid OTP", type: "error" });
-                setLoading(false);
-                return;
-            }
-
-            const { updateOrder } = await import("@/lib/orders");
-            await updateOrder(tempOrderId, {
-                currentStage: activeStages[0] || "materials",
-            });
-
-            setToast({ message: "Order confirmed successfully!", type: "success" });
-            setTimeout(() => {
-                onClose();
-            }, 1500);
-        } catch (error) {
-            console.error("Verification error:", error);
-            setToast({ message: "Failed to confirm order", type: "error" });
-            setLoading(false);
-        }
-    };
-
     const getStatusColor = (status: string) => {
         switch (status) {
             case "completed": return "bg-green-100 text-green-800";
@@ -293,66 +258,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             default: return "bg-gray-100 text-gray-800";
         }
     };
-
-    if (step === "review") {
-        return (
-            <div className="card max-w-2xl mx-auto">
-                {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Review Order</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                    <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Customer Name</p>
-                        <p className="font-semibold text-gray-900 dark:text-white">{customerName}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Phone</p>
-                        <p className="font-semibold text-gray-900 dark:text-white">{customerPhone}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Garment Type</p>
-                        <p className="font-semibold text-gray-900 dark:text-white capitalize">{garmentType.replace(/_/g, " ")}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Due Date</p>
-                        <p className="font-semibold text-gray-900 dark:text-white">{new Date(dueDate).toLocaleDateString()}</p>
-                    </div>
-                </div>
-
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-blue-800 dark:text-blue-400">
-                        An OTP has been sent to <strong>{customerPhone}</strong>
-                    </p>
-                </div>
-
-                <div className="mb-6">
-                    <label className="label">Enter OTP</label>
-                    <input
-                        type="text"
-                        maxLength={6}
-                        value={inputOTP}
-                        onChange={(e) => setInputOTP(e.target.value.replace(/\D/g, ""))}
-                        className="input text-center text-2xl tracking-widest"
-                        placeholder="000000"
-                    />
-                </div>
-
-                <button
-                    onClick={handleVerifyOTP}
-                    disabled={loading || inputOTP.length !== 6}
-                    className="w-full btn btn-primary disabled:opacity-50"
-                >
-                    {loading ? "Confirming..." : "Confirm Order"}
-                </button>
-            </div>
-        );
-    }
 
     return (
         <div className="card max-w-4xl mx-auto">

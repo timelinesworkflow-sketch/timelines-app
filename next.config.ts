@@ -10,8 +10,7 @@ const nextConfig: NextConfig = {
             },
         ],
     },
-    // Next.js 16 uses Turbopack by default - empty config to silence webpack warning
-    turbopack: {},
+
     webpack: (config, { isServer }) => {
         if (!isServer) {
             config.resolve.fallback = {
