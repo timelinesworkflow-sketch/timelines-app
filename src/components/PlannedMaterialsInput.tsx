@@ -15,24 +15,25 @@ export default function PlannedMaterialsInput({
     onChange,
     disabled = false,
 }: PlannedMaterialsInputProps) {
+    // Define selectedUnit first since createEmptyItem needs it
+    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("Meter");
+    const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLTableCellElement>(null);
+
+    // Helper function to create empty item with default unit
+    const createEmptyItem = (): PlannedMaterial => ({
+        materialId: "",
+        materialName: "",
+        colour: "",
+        measurement: 0,
+        unit: "Meter", // Use default value, will be updated by useEffect when unit changes
+    });
+
     const [items, setItems] = useState<PlannedMaterial[]>(
         initialItems && initialItems.length > 0
             ? initialItems
             : [createEmptyItem()]
     );
-    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("Meter");
-    const [showUnitDropdown, setShowUnitDropdown] = useState(false);
-    const dropdownRef = useRef<HTMLTableCellElement>(null);
-
-    function createEmptyItem(): PlannedMaterial {
-        return {
-            materialId: "",
-            materialName: "",
-            colour: "",
-            measurement: 0,
-            unit: selectedUnit,
-        };
-    }
 
     // Close dropdown when clicking outside
     useEffect(() => {
