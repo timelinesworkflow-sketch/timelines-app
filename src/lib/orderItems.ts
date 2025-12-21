@@ -31,6 +31,7 @@ export function getNextItemStage(currentStage: ItemStatus): ItemStatus | null {
 
 /**
  * Create a new empty order item
+ * Note: deadline is undefined by default to avoid calling Timestamp.now() during module initialization
  */
 export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): Partial<OrderItem> {
     return {
@@ -42,7 +43,7 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         referenceImages: [],
         materialCost: 0,
         labourCost: 0,
-        deadline: Timestamp.now(),
+        // deadline is set when the order is actually created
         status: "intake",
         handledBy: "",
         handledByName: "",
