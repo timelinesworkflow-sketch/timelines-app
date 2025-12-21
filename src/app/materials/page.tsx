@@ -15,6 +15,7 @@ import {
     getInventorySummary,
     InventorySummary
 } from "@/lib/inventory";
+import { createPurchaseRequest } from "@/lib/purchases";
 import { Timestamp } from "firebase/firestore";
 import {
     Package,
@@ -67,6 +68,9 @@ export default function MaterialsPage() {
         costPerMeter: 0,
         supplier: "",
     });
+
+    // Request Purchase state
+    const [requestingPurchase, setRequestingPurchase] = useState(false);
 
     useEffect(() => {
         loadOrders();
@@ -249,6 +253,53 @@ export default function MaterialsPage() {
         }
     };
 
+    // Handle Request Purchase for materials with shortages
+    const handleRequestPurchase = async () => {
+        if (!currentOrder || !userData) return;
+
+        const materialsWithShortages = materialsWithStatus.filter(m => m.shortageLength > 0);
+        if (materialsWithShortages.length === 0) {
+            setToast({ message: "No materials with shortages to request", type: "info" });
+            return;
+        }
+
+        setRequestingPurchase(true);
+
+        try {
+            // Calculate due date as 3 days from now (can be customized)
+            const dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + 3);
+
+            // Create purchase requests for each material with shortage
+            for (const material of materialsWithShortages) {
+                await createPurchaseRequest({
+                    materialId: material.materialId,
+                    materialName: material.materialName,
+                    colour: material.colour,
+                    measurement: material.shortageLength,
+                    unit: material.unit,
+                    dueDate,
+                    requestedByStaffId: userData.staffId,
+                    requestedByStaffName: userData.name,
+                    requestedByRole: userData.role,
+                    purchaseType: "order",
+                    orderId: currentOrder.orderId,
+                    garmentType: currentOrder.garmentType,
+                });
+            }
+
+            setToast({
+                message: `Requested ${materialsWithShortages.length} purchase(s) for the Purchase stage!`,
+                type: "success"
+            });
+        } catch (error) {
+            console.error("Failed to request purchase:", error);
+            setToast({ message: "Failed to request purchase", type: "error" });
+        } finally {
+            setRequestingPurchase(false);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "in_stock":
@@ -402,11 +453,19 @@ export default function MaterialsPage() {
                                                 {materialsWithStatus.some(m => m.stockStatus !== "in_stock") && (
                                                     <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
                                                         <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                                                        <div>
+                                                        <div className="flex-1">
                                                             <p className="font-medium text-red-700 dark:text-red-400">Purchase Required</p>
-                                                            <p className="text-sm text-red-600 dark:text-red-500">
-                                                                Some materials are not in stock. Add purchases before confirming.
+                                                            <p className="text-sm text-red-600 dark:text-red-500 mb-2">
+                                                                Some materials are not in stock. Request a purchase or add directly.
                                                             </p>
+                                                            <button
+                                                                onClick={handleRequestPurchase}
+                                                                disabled={requestingPurchase}
+                                                                className="btn btn-primary text-sm flex items-center space-x-2"
+                                                            >
+                                                                <ShoppingCart className="w-4 h-4" />
+                                                                <span>{requestingPurchase ? "Requesting..." : "Request Purchase for Shortages"}</span>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 )}
