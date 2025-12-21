@@ -1,0 +1,172 @@
+"use strict";
+/**
+ * Purchase Management System
+ * Handles both inventory-based and order-based purchases
+ */
+
+import { db } from "./firebase";
+import {
+    collection,
+    doc,
+    addDoc,
+    updateDoc,
+    getDocs,
+    query,
+    where,
+    orderBy,
+    Timestamp,
+} from "firebase/firestore";
+import { PurchaseRequest, PurchaseType, PurchaseStatus, MaterialUnit, UserRole, GarmentType } from "@/types";
+
+const PURCHASES_COLLECTION = "purchases";
+
+/**
+ * Create a new purchase request
+ */
+export async function createPurchaseRequest(data: {
+    materialId: string;
+    materialName: string;
+    colour?: string;
+    measurement: number;
+    unit: MaterialUnit;
+    dueDate: Date;
+    requestedByStaffId: string;
+    requestedByStaffName: string;
+    requestedByRole: UserRole;
+    purchaseType: PurchaseType;
+    orderId?: string;
+    garmentType?: GarmentType;
+}): Promise<string> {
+    const purchaseData: Omit<PurchaseRequest, "purchaseId"> = {
+        materialId: data.materialId,
+        materialName: data.materialName,
+        colour: data.colour,
+        measurement: data.measurement,
+        unit: data.unit,
+        dueDate: Timestamp.fromDate(data.dueDate),
+        requestedByStaffId: data.requestedByStaffId,
+        requestedByStaffName: data.requestedByStaffName,
+        requestedByRole: data.requestedByRole,
+        purchaseType: data.purchaseType,
+        orderId: data.orderId,
+        garmentType: data.garmentType,
+        status: "pending",
+        createdAt: Timestamp.now(),
+    };
+
+    const docRef = await addDoc(collection(db, PURCHASES_COLLECTION), purchaseData);
+
+    // Update with purchaseId
+    await updateDoc(docRef, { purchaseId: docRef.id });
+
+    return docRef.id;
+}
+
+/**
+ * Get all pending purchases (sorted by due date)
+ */
+export async function getPendingPurchases(): Promise<PurchaseRequest[]> {
+    const q = query(
+        collection(db, PURCHASES_COLLECTION),
+        where("status", "in", ["pending", "in_progress"]),
+        orderBy("dueDate", "asc")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        ...doc.data(),
+        purchaseId: doc.id,
+    } as PurchaseRequest));
+}
+
+/**
+ * Get purchases by type
+ */
+export async function getPurchasesByType(purchaseType: PurchaseType): Promise<PurchaseRequest[]> {
+    const q = query(
+        collection(db, PURCHASES_COLLECTION),
+        where("purchaseType", "==", purchaseType),
+        orderBy("dueDate", "asc")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        ...doc.data(),
+        purchaseId: doc.id,
+    } as PurchaseRequest));
+}
+
+/**
+ * Get purchases for a specific order
+ */
+export async function getPurchasesByOrder(orderId: string): Promise<PurchaseRequest[]> {
+    const q = query(
+        collection(db, PURCHASES_COLLECTION),
+        where("orderId", "==", orderId),
+        orderBy("createdAt", "desc")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        ...doc.data(),
+        purchaseId: doc.id,
+    } as PurchaseRequest));
+}
+
+/**
+ * Get all purchases (for admin view)
+ */
+export async function getAllPurchases(): Promise<PurchaseRequest[]> {
+    const q = query(
+        collection(db, PURCHASES_COLLECTION),
+        orderBy("createdAt", "desc")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        ...doc.data(),
+        purchaseId: doc.id,
+    } as PurchaseRequest));
+}
+
+/**
+ * Complete a purchase
+ * - For inventory purchases: materials are added to inventory
+ * - For order purchases: materials are sent to materials stage for that order
+ */
+export async function completePurchase(
+    purchaseId: string,
+    completedByStaffId: string,
+    completedByStaffName: string
+): Promise<void> {
+    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+
+    await updateDoc(purchaseRef, {
+        status: "completed" as PurchaseStatus,
+        completedByStaffId,
+        completedByStaffName,
+        completedAt: Timestamp.now(),
+    });
+
+    // Note: The actual routing to inventory or materials stage 
+    // is handled by the calling component after this function completes
+}
+
+/**
+ * Update purchase status
+ */
+export async function updatePurchaseStatus(
+    purchaseId: string,
+    status: PurchaseStatus
+): Promise<void> {
+    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+    await updateDoc(purchaseRef, { status });
+}
+
+/**
+ * Cancel a purchase
+ */
+export async function cancelPurchase(purchaseId: string): Promise<void> {
+    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+    await updateDoc(purchaseRef, { status: "cancelled" as PurchaseStatus });
+}

@@ -398,6 +398,7 @@ export default function AdminStaffPage() {
                                         <option value="supervisor">Supervisor</option>
                                         <option value="intake">Intake</option>
                                         <option value="materials">Materials</option>
+                                        <option value="purchase">Purchase</option>
                                         <option value="marking">Marking</option>
                                         <option value="marking_checker">Marking Checker</option>
                                         <option value="cutting">Cutting</option>

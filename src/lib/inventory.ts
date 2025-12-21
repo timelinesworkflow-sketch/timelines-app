@@ -189,6 +189,29 @@ export async function getPurchasesByDateRange(
     return snapshot.docs.map((doc) => doc.data() as MaterialPurchase);
 }
 
+// Simple wrapper for recording a purchase from the Purchase stage
+export async function recordMaterialPurchase(data: {
+    materialId: string;
+    materialName: string;
+    category: string;
+    quantity: number;
+    meter: number;
+    costPerMeter: number;
+    staffId: string;
+    staffName: string;
+}): Promise<string> {
+    return addPurchase({
+        materialId: data.materialId,
+        materialName: data.materialName,
+        category: data.category,
+        quantity: data.quantity,
+        meter: data.meter,
+        costPerMeter: data.costPerMeter,
+        laborStaffId: data.staffId,
+        laborStaffName: data.staffName,
+    });
+}
+
 // ============================================
 // USAGE MANAGEMENT (Reduces Inventory)
 // ============================================

@@ -14,7 +14,8 @@ export type UserRole =
     | "hooks"
     | "ironing"
     | "billing"
-    | "delivery";
+    | "delivery"
+    | "purchase";
 
 export interface User {
     email: string;
@@ -179,6 +180,41 @@ export interface OrderMaterials {
     completedByStaffId: string;
     completedByStaffName: string;
     completedAt: Timestamp;
+}
+
+// ============================================
+// PURCHASE SYSTEM
+// ============================================
+
+// Purchase type: inventory-based or order-based
+export type PurchaseType = "inventory" | "order";
+
+// Purchase status
+export type PurchaseStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+// Purchase Request (for both inventory and order-based purchases)
+export interface PurchaseRequest {
+    purchaseId: string;
+    materialId: string;
+    materialName: string;
+    colour?: string;
+    measurement: number;
+    unit: MaterialUnit;
+    dueDate: Timestamp;
+    // Request metadata
+    requestedByStaffId: string;
+    requestedByStaffName: string;
+    requestedByRole: UserRole;
+    purchaseType: PurchaseType;
+    // Order-based purchase fields (only for purchaseType: "order")
+    orderId?: string;
+    garmentType?: GarmentType;
+    // Status tracking
+    status: PurchaseStatus;
+    completedByStaffId?: string;
+    completedByStaffName?: string;
+    completedAt?: Timestamp;
+    createdAt: Timestamp;
 }
 
 // ============================================

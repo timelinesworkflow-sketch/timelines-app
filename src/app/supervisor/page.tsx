@@ -2,7 +2,17 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Eye, Users, Package } from "lucide-react";
+import { Package, Eye, Scissors, Shirt, ShoppingCart, Ruler, Flame } from "lucide-react";
+
+const SUPERVISOR_STAGES = [
+    { href: "/intake", icon: Package, label: "Intake", desc: "Manage orders", color: "indigo" },
+    { href: "/materials", icon: Eye, label: "Materials", desc: "View materials", color: "purple" },
+    { href: "/purchase", icon: ShoppingCart, label: "Purchase", desc: "Manage purchases", color: "emerald" },
+    { href: "/marking", icon: Ruler, label: "Marking", desc: "View marking", color: "blue" },
+    { href: "/cutting", icon: Scissors, label: "Cutting", desc: "View cutting", color: "green" },
+    { href: "/stitching", icon: Shirt, label: "Stitching", desc: "View stitching", color: "pink" },
+    { href: "/ironing", icon: Flame, label: "Ironing", desc: "View ironing", color: "orange" },
+];
 
 export default function SupervisorPage() {
     return (
@@ -21,80 +31,37 @@ export default function SupervisorPage() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <a href="/intake" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                                    <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Intake</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Manage orders</p>
-                                </div>
-                            </div>
-                        </a>
+                        {SUPERVISOR_STAGES.map((stage) => {
+                            const Icon = stage.icon;
+                            return (
+                                <a
+                                    key={stage.href}
+                                    href={stage.href}
+                                    className="card hover:shadow-lg transition-shadow cursor-pointer"
+                                >
+                                    <div className="flex items-center space-x-3">
+                                        <div className={`w-12 h-12 rounded-full bg-${stage.color}-100 dark:bg-${stage.color}-900/30 flex items-center justify-center`}>
+                                            <Icon className={`w-6 h-6 text-${stage.color}-600 dark:text-${stage.color}-400`} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-white">{stage.label}</h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">{stage.desc}</p>
+                                        </div>
+                                    </div>
+                                </a>
+                            );
+                        })}
+                    </div>
 
-                        <a href="/materials" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                    <Eye className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Materials</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">View materials</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="/marking" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                    <Eye className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Marking</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">View marking</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="/cutting" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                    <Eye className="w-6 h-6 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Cutting</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">View cutting</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="/stitching" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
-                                    <Eye className="w-6 h-6 text-pink-600 dark:text-pink-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Stitching</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">View stitching</p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <a href="/billing" className="card hover:shadow-lg transition-shadow cursor-pointer">
-                            <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                                    <Eye className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white">Billing</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">View billing</p>
-                                </div>
-                            </div>
-                        </a>
+                    {/* Note about restricted access */}
+                    <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                            <strong>Note:</strong> Supervisors can view and manage workflow stages but cannot access Billing, Delivery, or Admin Dashboard.
+                        </p>
                     </div>
                 </div>
             </div>
         </ProtectedRoute>
     );
 }
+
