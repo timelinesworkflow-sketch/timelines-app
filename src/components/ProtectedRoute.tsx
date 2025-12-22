@@ -22,12 +22,12 @@ export default function ProtectedRoute({
     useEffect(() => {
         if (!loading) {
             if (!user || !userData) {
-                router.push("/");
+                router.replace("/");
                 return;
             }
 
             if (!userData.isActive) {
-                router.push("/");
+                router.replace("/");
                 return;
             }
 
@@ -39,6 +39,7 @@ export default function ProtectedRoute({
                     supervisor: "/supervisor",
                     intake: "/intake",
                     materials: "/materials",
+                    purchase: "/purchase",
                     marking: "/marking",
                     marking_checker: "/marking-check",
                     cutting: "/cutting",
@@ -51,7 +52,7 @@ export default function ProtectedRoute({
                     delivery: "/delivery",
                 };
 
-                router.push(roleRoutes[userData.role] || "/");
+                router.replace(roleRoutes[userData.role] || "/");
             }
         }
     }, [user, userData, loading, allowedRoles, router]);
