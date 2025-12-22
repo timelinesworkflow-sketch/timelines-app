@@ -26,6 +26,7 @@ export default function LoginPage() {
             supervisor: "/supervisor",
             intake: "/intake",
             materials: "/materials",
+            purchase: "/purchase",
             marking: "/marking",
             marking_checker: "/marking-check",
             cutting: "/cutting",
@@ -38,7 +39,7 @@ export default function LoginPage() {
             delivery: "/delivery",
         };
 
-        router.push(roleRoutes[role] || "/");
+        router.replace(roleRoutes[role] || "/");
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
