@@ -39,6 +39,7 @@ export default function ProtectedRoute({
                     supervisor: "/supervisor",
                     intake: "/intake",
                     materials: "/materials",
+                       purchase: "/purchase",
                     marking: "/marking",
                     marking_checker: "/marking-check",
                     cutting: "/cutting",
