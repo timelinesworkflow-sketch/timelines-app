@@ -65,9 +65,17 @@ export default function ProtectedRoute({
         );
     }
 
-    if (!user || !userData || !allowedRoles.includes(userData.role)) {
-        return null;
-    }
+    if (!user || !userData) {
+    return null;
+}
+
+if (!allowedRoles.includes(userData.role)) {
+    return (
+        <div className="min-h-screen flex items-center justify-center text-red-600">
+            Access denied
+        </div>
+    );
+}
 
     return <>{children}</>;
 }
