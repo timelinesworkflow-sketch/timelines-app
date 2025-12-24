@@ -66,6 +66,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
     const [showOrderHistory, setShowOrderHistory] = useState(false);
 
+    // RE Work toggle (for RE Blouse / RE Pavada Sattai categories)
+    const [includeREWork, setIncludeREWork] = useState(true);
+
     // Temp order ID for tracking
     const [tempOrderId, setTempOrderId] = useState("");
 
@@ -428,9 +431,30 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         <option value="chudi">Chudi</option>
                         <option value="frock">Frock</option>
                         <option value="pavadai_sattai">Pavadai Sattai</option>
+                        <option value="re_blouse">RE Blouse</option>
+                        <option value="re_pavada_sattai">RE Pavada Sattai</option>
                         <option value="other">Other</option>
                     </select>
                 </div>
+
+                {/* RE Work Toggle - Only for RE categories */}
+                {(garmentType === "re_blouse" || garmentType === "re_pavada_sattai") && (
+                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <label className="font-medium text-purple-800 dark:text-purple-300">Include RE Work Stage</label>
+                                <p className="text-sm text-purple-600 dark:text-purple-400">RE staff will be included in this order workflow</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIncludeREWork(!includeREWork)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${includeREWork ? "bg-purple-600" : "bg-gray-300"}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${includeREWork ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Measurement Type Toggle */}
                 <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">

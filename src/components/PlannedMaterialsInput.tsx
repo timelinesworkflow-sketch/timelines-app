@@ -27,6 +27,7 @@ export default function PlannedMaterialsInput({
         colour: "",
         measurement: 0,
         unit: "Meter", // Use default value, will be updated by useEffect when unit changes
+        materialSource: "company", // Default to company-provided
     });
 
     const [items, setItems] = useState<PlannedMaterial[]>(
@@ -149,6 +150,9 @@ export default function PlannedMaterialsInput({
                                     </div>
                                 )}
                             </th>
+                            <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-left font-semibold text-gray-900 dark:text-white">
+                                Source
+                            </th>
                             <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center w-12">
                                 ✕
                             </th>
@@ -198,6 +202,20 @@ export default function PlannedMaterialsInput({
                                         step="0.1"
                                         disabled={disabled}
                                     />
+                                </td>
+                                <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
+                                    <select
+                                        value={item.materialSource || "company"}
+                                        onChange={(e) => updateItem(index, "materialSource", e.target.value)}
+                                        className={`w-24 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded font-medium ${(item.materialSource || "company") === "customer"
+                                                ? "text-orange-600 dark:text-orange-400"
+                                                : "text-green-600 dark:text-green-400"
+                                            }`}
+                                        disabled={disabled}
+                                    >
+                                        <option value="company">Company</option>
+                                        <option value="customer">Customer</option>
+                                    </select>
                                 </td>
                                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1 text-center">
                                     <button

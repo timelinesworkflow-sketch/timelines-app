@@ -27,7 +27,7 @@ export interface User {
     createdAt: Timestamp;
 }
 
-export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "other";
+export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "re_blouse" | "re_pavada_sattai" | "other";
 
 export type OrderStatus =
     | "draft"
@@ -111,6 +111,7 @@ export interface PlannedMaterial {
     colour: string;              // Color specification
     measurement: number;         // Value in selected unit
     unit: MaterialUnit;          // Selected unit (Meter/Gram/Packet)
+    materialSource: "customer" | "company";  // Who provides the material (defaults to "company")
 }
 
 // Order's planned materials from intake
@@ -259,6 +260,9 @@ export interface OrderItem {
     handledByName?: string;     // Current handler name
     timeline: ItemTimelineEntry[];
     garmentType?: GarmentType;
+    // Per-item staff assignment (set by Admin)
+    assignedStaffId?: string;
+    assignedStaffName?: string;
 }
 
 // Overall order status based on item completion
@@ -300,6 +304,8 @@ export interface Order {
     totalItems?: number;         // Computed: items.length
     completedItems?: number;     // Computed: items where status = "ready" or "delivered"
     overallStatus?: OverallOrderStatus;  // Computed from item statuses
+    // RE Work workflow
+    includeREWork?: boolean;     // For RE categories - includes RE Work stage
 }
 
 export interface TimelineEntry {
@@ -403,6 +409,35 @@ export const MEASUREMENT_FIELDS: Record<GarmentType, string[]> = {
         "pk",                // PK
     ],
     pavadai_sattai: [
+        "pavadaiFullLength", // Pavadai Full Length
+        "hipLoose",          // Hip Loose
+        "bodyPavadaiLength", // Body Pavadai Length
+        "sattaiHeight",      // Sattai Height
+        "sattaiLoose",       // Sattai Loose
+        "hip",               // Hip
+        "chest",             // Chest
+        "backNeck",          // Back Neck
+        "frontNeck",         // Front Neck
+        "arm",               // Arm
+        "sleeveLength",      // Sleeve Length
+        "sleeveLoose",       // Sleeve Loose
+        "pk",                // PK
+    ],
+    re_blouse: [
+        // RE Blouse uses same measurements as regular blouse
+        "blouseLength",      // BL
+        "frontLength",       // FL
+        "backNeck",          // BN
+        "frontNeck",         // FN
+        "chest",             // Chest
+        "hip",               // Hip
+        "sleeveLength",      // SL
+        "sleeveAround",      // SA
+        "armHole",           // ARM H
+        "pk",                // PK
+    ],
+    re_pavada_sattai: [
+        // RE Pavada Sattai uses same measurements as regular pavadai_sattai
         "pavadaiFullLength", // Pavadai Full Length
         "hipLoose",          // Hip Loose
         "bodyPavadaiLength", // Body Pavadai Length
