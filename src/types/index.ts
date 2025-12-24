@@ -25,6 +25,8 @@ export interface User {
     allowedStages: string[];
     isActive: boolean;
     createdAt: Timestamp;
+    // Marking task capabilities (what tasks this staff CAN perform)
+    markingTaskCapabilities?: string[];
 }
 
 export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "re_blouse" | "re_pavada_sattai" | "other";
@@ -235,6 +237,47 @@ export interface AssignmentAuditLog {
     assignedByStaffName: string;
     assignedByRole: "admin" | "supervisor";
     timestamp: Timestamp;
+}
+
+// ============================================
+// MARKING STAGE TYPES
+// ============================================
+
+// Marking Task Status
+export type MarkingTaskStatus = "not_started" | "in_progress" | "completed" | "needs_rework" | "approved";
+
+// Marking Template Task (definition in template)
+export interface MarkingTemplateTask {
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+}
+
+// Marking Template (defines tasks for a garment type)
+export interface MarkingTemplate {
+    templateId: string;
+    garmentType: GarmentType;
+    tasks: MarkingTemplateTask[];
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+}
+
+// Marking Task (order-specific instance of a template task)
+export interface MarkingTask {
+    taskId: string;
+    orderId: string;
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+    status: MarkingTaskStatus;
+    assignedStaffId?: string;
+    assignedStaffName?: string;
+    startedAt?: Timestamp;
+    completedAt?: Timestamp;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: Timestamp;
+    notes?: string;
 }
 
 // ============================================

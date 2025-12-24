@@ -2,7 +2,7 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Users, Briefcase, Package, TrendingUp, Settings, Ruler, BarChart3 } from "lucide-react";
+import { Users, Briefcase, Package, TrendingUp, Settings, Ruler, BarChart3, Layers } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -68,6 +68,23 @@ export default function AdminPage() {
                                     </h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">
                                         Analytics and workload metrics
+                                    </p>
+                                </div>
+                            </div>
+                        </Link>
+
+                        {/* Marking Templates */}
+                        <Link href="/admin/marking-templates" className="card hover:shadow-xl transition-all cursor-pointer group">
+                            <div className="flex items-start space-x-4">
+                                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                                    <Layers className="w-7 h-7 text-white" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                                        Marking Templates
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        Define tasks for garment types
                                     </p>
                                 </div>
                             </div>
