@@ -11,6 +11,7 @@ import { Package, Calendar, User, Phone, Edit, X, Save, AlertCircle, Check, Doll
 import { Timestamp } from "firebase/firestore";
 import Toast from "@/components/Toast";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
+import DateFilter, { DateFilterType, filterByDate } from "@/components/DateFilter";
 
 export default function OrdersList() {
     const { userData } = useAuth();
@@ -19,6 +20,7 @@ export default function OrdersList() {
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+    const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
 
     // Edit form state
     const [editCustomerName, setEditCustomerName] = useState("");
@@ -367,7 +369,15 @@ export default function OrdersList() {
         <div className="space-y-4">
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-            {orders.map((order) => (
+            {/* Filter Header */}
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {filterByDate(orders, dateFilter, (o) => o.createdAt?.toDate()).length} orders
+                </p>
+                <DateFilter onFilterChange={setDateFilter} />
+            </div>
+
+            {filterByDate(orders, dateFilter, (o) => o.createdAt?.toDate()).map((order) => (
                 <div key={order.orderId} className="card hover:shadow-lg transition-shadow">
                     <div className="flex items-start justify-between">
                         <div className="flex-1">

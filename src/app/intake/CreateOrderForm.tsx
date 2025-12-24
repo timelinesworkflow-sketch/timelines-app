@@ -34,6 +34,21 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [plannedMaterials, setPlannedMaterials] = useState<PlannedMaterial[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Measurement Type Toggle: "customer_gives" or "measurement_blouse"
+    const [measurementType, setMeasurementType] = useState<"customer_gives" | "measurement_blouse">("customer_gives");
+
+    // Enhanced Image Upload State
+    const [imageUploads, setImageUploads] = useState<{
+        file: File;
+        preview: string;
+        description: string;
+    }[]>([]);
+
+    // Blouse-specific image sections (only used when measurementType = "measurement_blouse" and garmentType = "blouse")
+    const [frontNeckImage, setFrontNeckImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
+    const [backNeckImage, setBackNeckImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
+    const [sleeveImage, setSleeveImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
+
     // Multi-item state
     const [orderItems, setOrderItems] = useState<Partial<OrderItem>[]>([createEmptyItem(1, "blouse")]);
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
@@ -385,31 +400,68 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="label">Garment Type *</label>
-                        <select
-                            value={garmentType}
-                            onChange={(e) => setGarmentType(e.target.value as GarmentType)}
-                            className="input"
+                {/* Due Date - Prominent Position */}
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+                    <label className="label text-indigo-700 dark:text-indigo-300 font-semibold flex items-center space-x-2">
+                        <Clock className="w-4 h-4" />
+                        <span>Due Date *</span>
+                    </label>
+                    <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="input text-lg font-medium"
+                        required
+                        min={new Date().toISOString().split("T")[0]}
+                    />
+                </div>
+
+                {/* Product Category / Garment Type */}
+                <div>
+                    <label className="label">Product Category / Garment Type *</label>
+                    <select
+                        value={garmentType}
+                        onChange={(e) => setGarmentType(e.target.value as GarmentType)}
+                        className="input"
+                    >
+                        <option value="blouse">Blouse</option>
+                        <option value="chudi">Chudi</option>
+                        <option value="frock">Frock</option>
+                        <option value="pavadai_sattai">Pavadai Sattai</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                {/* Measurement Type Toggle */}
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <label className="label mb-3">Measurement Type</label>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setMeasurementType("customer_gives")}
+                            className={`flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all ${measurementType === "customer_gives"
+                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
+                                }`}
                         >
-                            <option value="blouse">Blouse</option>
-                            <option value="chudi">Chudi</option>
-                            <option value="frock">Frock</option>
-                            <option value="pavadai_sattai">Pavadai Sattai</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="label">Due Date *</label>
-                        <input
-                            type="date"
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
-                            className="input"
-                            required
-                            min={new Date().toISOString().split("T")[0]}
-                        />
+                            <div className="flex items-center justify-center space-x-2">
+                                <span>📏</span>
+                                <span>Customer Gives Measurements</span>
+                            </div>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMeasurementType("measurement_blouse")}
+                            className={`flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all ${measurementType === "measurement_blouse"
+                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
+                                }`}
+                        >
+                            <div className="flex items-center justify-center space-x-2">
+                                <span>👕</span>
+                                <span>Customer Gives Measurement Blouse</span>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
@@ -732,28 +784,30 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     )}
                 </div>
 
-                {/* Legacy Measurements (for order-level, kept for backwards compatibility) */}
-                <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Order-Level Measurements (Optional)</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {MEASUREMENT_FIELDS[garmentType].map((field) => (
-                            <div key={field}>
-                                <label className="label text-xs">
-                                    {MEASUREMENT_LABELS[field] || field}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={measurements[field] || ""}
-                                    onChange={(e) =>
-                                        setMeasurements({ ...measurements, [field]: e.target.value })
-                                    }
-                                    className="input"
-                                    placeholder="0"
-                                />
-                            </div>
-                        ))}
+                {/* Legacy Measurements (for order-level, kept for backwards compatibility) - Only when giving measurements */}
+                {measurementType === "customer_gives" && (
+                    <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Order-Level Measurements</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {MEASUREMENT_FIELDS[garmentType].map((field) => (
+                                <div key={field}>
+                                    <label className="label text-xs">
+                                        {MEASUREMENT_LABELS[field] || field}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={measurements[field] || ""}
+                                        onChange={(e) =>
+                                            setMeasurements({ ...measurements, [field]: e.target.value })
+                                        }
+                                        className="input"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Planned Materials */}
                 <PlannedMaterialsInput
@@ -788,29 +842,173 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 </div>
 
-                {/* Upload Images */}
-                <div>
-                    <label className="label flex items-center space-x-2">
-                        <Upload className="w-4 h-4" />
-                        <span>Reference Images (Max 3)</span>
-                    </label>
-                    <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleFilesChange}
-                        className="input"
-                    />
-                    {samplerFiles.length > 0 && (
-                        <div className="mt-2 flex gap-2">
-                            {samplerFiles.map((file, idx) => (
-                                <div key={idx} className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                                    {file.name}
+                {/* Image Upload Section - Only when measurement_blouse is selected */}
+                {measurementType === "measurement_blouse" && (
+                    <div className="space-y-4">
+                        <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
+                            <Upload className="w-5 h-5" />
+                            <span>Reference Images</span>
+                        </h3>
+
+                        {/* Blouse-Specific Image Sections */}
+                        {garmentType === "blouse" && (
+                            <div className="space-y-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                                <p className="text-sm text-purple-700 dark:text-purple-300 font-medium">Blouse Reference Images</p>
+
+                                {/* Front Neck Image */}
+                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
+                                    <label className="label text-sm">Front Neck Image</label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                const file = e.target.files[0];
+                                                setFrontNeckImage({
+                                                    file,
+                                                    preview: URL.createObjectURL(file),
+                                                    description: frontNeckImage.description
+                                                });
+                                            }
+                                        }}
+                                        className="input text-sm"
+                                    />
+                                    {frontNeckImage.preview && (
+                                        <img src={frontNeckImage.preview} alt="Front Neck" className="mt-2 w-24 h-24 object-cover rounded" />
+                                    )}
+                                    <input
+                                        type="text"
+                                        value={frontNeckImage.description}
+                                        onChange={(e) => setFrontNeckImage({ ...frontNeckImage, description: e.target.value })}
+                                        placeholder="Add description (optional)"
+                                        className="input text-sm mt-2"
+                                    />
                                 </div>
-                            ))}
+
+                                {/* Back Neck Image */}
+                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
+                                    <label className="label text-sm">Back Neck Image</label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                const file = e.target.files[0];
+                                                setBackNeckImage({
+                                                    file,
+                                                    preview: URL.createObjectURL(file),
+                                                    description: backNeckImage.description
+                                                });
+                                            }
+                                        }}
+                                        className="input text-sm"
+                                    />
+                                    {backNeckImage.preview && (
+                                        <img src={backNeckImage.preview} alt="Back Neck" className="mt-2 w-24 h-24 object-cover rounded" />
+                                    )}
+                                    <input
+                                        type="text"
+                                        value={backNeckImage.description}
+                                        onChange={(e) => setBackNeckImage({ ...backNeckImage, description: e.target.value })}
+                                        placeholder="Add description (optional)"
+                                        className="input text-sm mt-2"
+                                    />
+                                </div>
+
+                                {/* Sleeve Image */}
+                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
+                                    <label className="label text-sm">Sleeve Image</label>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                const file = e.target.files[0];
+                                                setSleeveImage({
+                                                    file,
+                                                    preview: URL.createObjectURL(file),
+                                                    description: sleeveImage.description
+                                                });
+                                            }
+                                        }}
+                                        className="input text-sm"
+                                    />
+                                    {sleeveImage.preview && (
+                                        <img src={sleeveImage.preview} alt="Sleeve" className="mt-2 w-24 h-24 object-cover rounded" />
+                                    )}
+                                    <input
+                                        type="text"
+                                        value={sleeveImage.description}
+                                        onChange={(e) => setSleeveImage({ ...sleeveImage, description: e.target.value })}
+                                        placeholder="Add description (optional)"
+                                        className="input text-sm mt-2"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Additional Reference Images (for all categories) */}
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <label className="label flex items-center justify-between">
+                                <span>{garmentType === "blouse" ? "Additional Reference Images" : "Reference Images"} (Max 10)</span>
+                                <span className="text-xs text-gray-500">{imageUploads.length}/10</span>
+                            </label>
+                            <input
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                onChange={(e) => {
+                                    if (e.target.files) {
+                                        const newFiles = Array.from(e.target.files).slice(0, 10 - imageUploads.length);
+                                        const newUploads = newFiles.map(file => ({
+                                            file,
+                                            preview: URL.createObjectURL(file),
+                                            description: ""
+                                        }));
+                                        setImageUploads([...imageUploads, ...newUploads]);
+                                    }
+                                }}
+                                className="input"
+                                disabled={imageUploads.length >= 10}
+                            />
+
+                            {imageUploads.length > 0 && (
+                                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {imageUploads.map((upload, idx) => (
+                                        <div key={idx} className="relative border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+                                            <img
+                                                src={upload.preview}
+                                                alt={`Upload ${idx + 1}`}
+                                                className="w-full h-20 object-cover rounded"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={upload.description}
+                                                onChange={(e) => {
+                                                    const newUploads = [...imageUploads];
+                                                    newUploads[idx] = { ...newUploads[idx], description: e.target.value };
+                                                    setImageUploads(newUploads);
+                                                }}
+                                                placeholder="Description (optional)"
+                                                className="input text-xs mt-1"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    URL.revokeObjectURL(upload.preview);
+                                                    setImageUploads(imageUploads.filter((_, i) => i !== idx));
+                                                }}
+                                                className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* Submit Button */}
                 <button

@@ -8,6 +8,7 @@ import { PurchaseRequest, PurchaseType } from "@/types";
 import { getPurchasesByType, completePurchase } from "@/lib/purchases";
 import { recordMaterialPurchase } from "@/lib/inventory";
 import { Package, ShoppingCart, Warehouse, Check, AlertCircle, Calendar } from "lucide-react";
+import DateFilter, { DateFilterType, filterByDate } from "@/components/DateFilter";
 
 export default function PurchasePageContent() {
     const { userData } = useAuth();
@@ -17,6 +18,7 @@ export default function PurchasePageContent() {
     const [loading, setLoading] = useState(true);
     const [completingId, setCompletingId] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+    const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
 
     useEffect(() => {
         loadPurchases();
@@ -84,6 +86,7 @@ export default function PurchasePageContent() {
     };
 
     const currentPurchases = activeTab === "inventory" ? inventoryPurchases : orderPurchases;
+    const filteredPurchases = filterByDate(currentPurchases, dateFilter, (p) => p.dueDate?.toDate());
 
     return (
         <div className="page-container min-h-screen">
@@ -149,83 +152,102 @@ export default function PurchasePageContent() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {currentPurchases.map((purchase) => (
-                            <div
-                                key={purchase.purchaseId}
-                                className={`card ${isOverdue(purchase.dueDate) ? "border-l-4 border-l-red-500" : ""}`}
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center space-x-3 mb-2">
-                                            <Package className="w-5 h-5 text-indigo-600" />
-                                            <h3 className="font-semibold text-gray-900 dark:text-white">
-                                                {purchase.materialName}
-                                            </h3>
-                                            {purchase.colour && (
-                                                <span className="text-sm text-gray-500">({purchase.colour})</span>
-                                            )}
-                                        </div>
+                        {/* Filter Header */}
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {filteredPurchases.length} purchases (by due date)
+                            </p>
+                            <DateFilter onFilterChange={setDateFilter} />
+                        </div>
 
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                                            <div>
-                                                <span className="text-gray-500">Measurement:</span>
-                                                <span className="ml-1 font-medium">{purchase.measurement} {purchase.unit}</span>
-                                            </div>
-                                            <div className="flex items-center">
-                                                <Calendar className="w-4 h-4 mr-1 text-gray-400" />
-                                                <span className={isOverdue(purchase.dueDate) ? "text-red-600 font-medium" : ""}>
-                                                    Due: {formatDate(purchase.dueDate)}
-                                                </span>
-                                                {isOverdue(purchase.dueDate) && (
-                                                    <AlertCircle className="w-4 h-4 ml-1 text-red-500" />
-                                                )}
-                                            </div>
-                                            <div>
-                                                <span className="text-gray-500">Requested by:</span>
-                                                <span className="ml-1">{purchase.requestedByStaffName}</span>
-                                            </div>
-                                            <div>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs ${purchase.purchaseType === "inventory"
-                                                    ? "bg-indigo-100 text-indigo-800"
-                                                    : "bg-green-100 text-green-800"
-                                                    }`}>
-                                                    {purchase.purchaseType === "inventory" ? "Inventory" : "Order-Based"}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Order-specific info */}
-                                        {purchase.purchaseType === "order" && purchase.orderId && (
-                                            <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm">
-                                                <span className="text-gray-600 dark:text-gray-400">Order: </span>
-                                                <span className="font-mono">{purchase.orderId.slice(0, 8)}...</span>
-                                                {purchase.garmentType && (
-                                                    <span className="ml-2 text-gray-500">
-                                                        ({purchase.garmentType.replace(/_/g, " ")})
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Complete button */}
-                                    <button
-                                        onClick={() => handleCompletePurchase(purchase)}
-                                        disabled={completingId === purchase.purchaseId}
-                                        className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                                    >
-                                        {completingId === purchase.purchaseId ? (
-                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                        ) : (
-                                            <>
-                                                <Check className="w-5 h-5" />
-                                                <span>Complete</span>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                        {filteredPurchases.length === 0 ? (
+                            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <Package className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    No purchases match this filter
+                                </p>
                             </div>
-                        ))}
+                        ) : (
+                            <div className="space-y-4">
+                                {filteredPurchases.map((purchase) => (
+                                    <div
+                                        key={purchase.purchaseId}
+                                        className={`card ${isOverdue(purchase.dueDate) ? "border-l-4 border-l-red-500" : ""}`}
+                                    >
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center space-x-3 mb-2">
+                                                    <Package className="w-5 h-5 text-indigo-600" />
+                                                    <h3 className="font-semibold text-gray-900 dark:text-white">
+                                                        {purchase.materialName}
+                                                    </h3>
+                                                    {purchase.colour && (
+                                                        <span className="text-sm text-gray-500">({purchase.colour})</span>
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                                                    <div>
+                                                        <span className="text-gray-500">Measurement:</span>
+                                                        <span className="ml-1 font-medium">{purchase.measurement} {purchase.unit}</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <Calendar className="w-4 h-4 mr-1 text-gray-400" />
+                                                        <span className={isOverdue(purchase.dueDate) ? "text-red-600 font-medium" : ""}>
+                                                            Due: {formatDate(purchase.dueDate)}
+                                                        </span>
+                                                        {isOverdue(purchase.dueDate) && (
+                                                            <AlertCircle className="w-4 h-4 ml-1 text-red-500" />
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-gray-500">Requested by:</span>
+                                                        <span className="ml-1">{purchase.requestedByStaffName}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs ${purchase.purchaseType === "inventory"
+                                                            ? "bg-indigo-100 text-indigo-800"
+                                                            : "bg-green-100 text-green-800"
+                                                            }`}>
+                                                            {purchase.purchaseType === "inventory" ? "Inventory" : "Order-Based"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Order-specific info */}
+                                                {purchase.purchaseType === "order" && purchase.orderId && (
+                                                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm">
+                                                        <span className="text-gray-600 dark:text-gray-400">Order: </span>
+                                                        <span className="font-mono">{purchase.orderId.slice(0, 8)}...</span>
+                                                        {purchase.garmentType && (
+                                                            <span className="ml-2 text-gray-500">
+                                                                ({purchase.garmentType.replace(/_/g, " ")})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Complete button */}
+                                            <button
+                                                onClick={() => handleCompletePurchase(purchase)}
+                                                disabled={completingId === purchase.purchaseId}
+                                                className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                                            >
+                                                {completingId === purchase.purchaseId ? (
+                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                                ) : (
+                                                    <>
+                                                        <Check className="w-5 h-5" />
+                                                        <span>Complete</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
