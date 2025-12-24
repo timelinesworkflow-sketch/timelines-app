@@ -122,8 +122,22 @@ export default function MaterialsPage() {
 
     const loadMaterialsWithStatus = async (plannedItems: PlannedMaterial[]) => {
         try {
-            const withStatus = await checkStockStatus(plannedItems);
-            setMaterialsWithStatus(withStatus);
+            // Only check stock for company-provided materials
+            // Customer-provided materials skip inventory check entirely
+            const companyMaterials = plannedItems.filter(item => item.materialSource !== "customer");
+            const withStatus = await checkStockStatus(companyMaterials);
+
+            // Add customer materials back with "customer_provided" status
+            const customerMaterials = plannedItems
+                .filter(item => item.materialSource === "customer")
+                .map(item => ({
+                    ...item,
+                    stockStatus: "customer_provided" as any,
+                    availableLength: 0,
+                    shortageLength: 0,
+                }));
+
+            setMaterialsWithStatus([...withStatus, ...customerMaterials]);
         } catch (error) {
             console.error("Failed to check stock status:", error);
         }
