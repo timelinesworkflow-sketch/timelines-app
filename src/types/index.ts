@@ -222,6 +222,21 @@ export interface PurchaseRequest {
     addedToInventoryQuantity?: number;
 }
 
+// Assignment Audit Log (tracks all staff assignments - append-only)
+export interface AssignmentAuditLog {
+    logId: string;
+    itemId: string;
+    orderId: string;
+    assignedFromStaffId?: string;
+    assignedFromStaffName?: string;
+    assignedToStaffId: string;
+    assignedToStaffName: string;
+    assignedByStaffId: string;
+    assignedByStaffName: string;
+    assignedByRole: "admin" | "supervisor";
+    timestamp: Timestamp;
+}
+
 // ============================================
 // MULTI-ITEM WORKFLOW TYPES
 // ============================================
