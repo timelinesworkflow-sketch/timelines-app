@@ -34,6 +34,7 @@ export async function createPurchaseRequest(data: {
     requestedByStaffName: string;
     requestedByRole: UserRole;
     purchaseType: PurchaseType;
+    sourceStage: "intake" | "materials";
     orderId?: string;
     garmentType?: GarmentType;
 }): Promise<string> {
@@ -48,6 +49,7 @@ export async function createPurchaseRequest(data: {
         requestedByStaffName: data.requestedByStaffName,
         requestedByRole: data.requestedByRole,
         purchaseType: data.purchaseType,
+        sourceStage: data.sourceStage,
         orderId: data.orderId,
         garmentType: data.garmentType,
         status: "pending",
@@ -169,4 +171,44 @@ export async function updatePurchaseStatus(
 export async function cancelPurchase(purchaseId: string): Promise<void> {
     const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
     await updateDoc(purchaseRef, { status: "cancelled" as PurchaseStatus });
+}
+
+/**
+ * Get completed purchases for a specific order (for Materials stage)
+ */
+export async function getCompletedOrderPurchases(orderId: string): Promise<PurchaseRequest[]> {
+    const q = query(
+        collection(db, PURCHASES_COLLECTION),
+        where("orderId", "==", orderId),
+        where("purchaseType", "==", "order"),
+        where("status", "==", "completed"),
+        orderBy("completedAt", "desc")
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        ...doc.data(),
+        purchaseId: doc.id,
+    } as PurchaseRequest));
+}
+
+/**
+ * Add leftover purchased material to inventory (Materials staff only)
+ * This is a manual action - not automatic
+ */
+export async function addPurchasedMaterialToInventory(
+    purchaseId: string,
+    quantity: number,
+    staffId: string,
+    staffName: string
+): Promise<void> {
+    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+
+    await updateDoc(purchaseRef, {
+        addedToInventory: true,
+        addedToInventoryQuantity: quantity,
+        addedToInventoryByStaffId: staffId,
+        addedToInventoryByStaffName: staffName,
+        addedToInventoryAt: Timestamp.now(),
+    });
 }

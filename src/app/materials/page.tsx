@@ -15,7 +15,8 @@ import {
     getInventorySummary,
     InventorySummary
 } from "@/lib/inventory";
-import { createPurchaseRequest } from "@/lib/purchases";
+import { createPurchaseRequest, getCompletedOrderPurchases, addPurchasedMaterialToInventory } from "@/lib/purchases";
+import { PurchaseRequest } from "@/types";
 import { Timestamp } from "firebase/firestore";
 import {
     Package,
@@ -72,6 +73,10 @@ export default function MaterialsPage() {
     // Request Purchase state
     const [requestingPurchase, setRequestingPurchase] = useState(false);
 
+    // Completed order purchases state (for showing purchased materials for this order)
+    const [completedOrderPurchases, setCompletedOrderPurchases] = useState<PurchaseRequest[]>([]);
+    const [addingToInventory, setAddingToInventory] = useState<string | null>(null);
+
     useEffect(() => {
         loadOrders();
         loadInventory();
@@ -82,6 +87,12 @@ export default function MaterialsPage() {
             loadMaterialsWithStatus(orders[currentIndex].plannedMaterials.items);
         } else {
             setMaterialsWithStatus([]);
+        }
+        // Load completed purchases for current order
+        if (orders[currentIndex]?.orderId) {
+            loadCompletedPurchases(orders[currentIndex].orderId);
+        } else {
+            setCompletedOrderPurchases([]);
         }
     }, [currentIndex, orders]);
 
@@ -115,6 +126,55 @@ export default function MaterialsPage() {
             setMaterialsWithStatus(withStatus);
         } catch (error) {
             console.error("Failed to check stock status:", error);
+        }
+    };
+
+    const loadCompletedPurchases = async (orderId: string) => {
+        try {
+            const purchases = await getCompletedOrderPurchases(orderId);
+            setCompletedOrderPurchases(purchases);
+        } catch (error) {
+            console.error("Failed to load completed purchases:", error);
+            setCompletedOrderPurchases([]);
+        }
+    };
+
+    const handleAddLeftoverToInventory = async (purchase: PurchaseRequest) => {
+        if (!userData) return;
+
+        setAddingToInventory(purchase.purchaseId);
+        try {
+            // Add to inventory
+            await addPurchase({
+                materialId: purchase.materialId,
+                materialName: purchase.materialName,
+                category: "",
+                quantity: 1,
+                meter: purchase.measurement,
+                costPerMeter: 0,
+                laborStaffId: userData.staffId,
+                laborStaffName: userData.name,
+            });
+
+            // Mark as added to inventory
+            await addPurchasedMaterialToInventory(
+                purchase.purchaseId,
+                purchase.measurement,
+                userData.staffId,
+                userData.name
+            );
+
+            setToast({ message: "Leftover material added to inventory!", type: "success" });
+            // Reload completed purchases
+            if (orders[currentIndex]?.orderId) {
+                loadCompletedPurchases(orders[currentIndex].orderId);
+            }
+            loadInventory();
+        } catch (error) {
+            console.error("Failed to add to inventory:", error);
+            setToast({ message: "Failed to add to inventory", type: "error" });
+        } finally {
+            setAddingToInventory(null);
         }
     };
 
@@ -283,6 +343,7 @@ export default function MaterialsPage() {
                     requestedByStaffName: userData.name,
                     requestedByRole: userData.role,
                     purchaseType: "order",
+                    sourceStage: "materials",
                     orderId: currentOrder.orderId,
                     garmentType: currentOrder.garmentType,
                 });

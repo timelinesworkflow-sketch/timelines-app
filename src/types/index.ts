@@ -206,6 +206,7 @@ export interface PurchaseRequest {
     requestedByStaffName: string;
     requestedByRole: UserRole;
     purchaseType: PurchaseType;
+    sourceStage: "intake" | "materials";  // Where the purchase was requested from
     // Order-based purchase fields (only for purchaseType: "order")
     orderId?: string;
     garmentType?: GarmentType;
@@ -215,6 +216,9 @@ export interface PurchaseRequest {
     completedByStaffName?: string;
     completedAt?: Timestamp;
     createdAt: Timestamp;
+    // Leftover tracking (for Materials stage to add to inventory)
+    addedToInventory?: boolean;
+    addedToInventoryQuantity?: number;
 }
 
 // ============================================

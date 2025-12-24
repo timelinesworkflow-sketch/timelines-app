@@ -204,13 +204,21 @@ export default function PurchasePageContent() {
                                                         <span className="text-gray-500">Requested by:</span>
                                                         <span className="ml-1">{purchase.requestedByStaffName}</span>
                                                     </div>
-                                                    <div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <span className={`px-2 py-0.5 rounded-full text-xs ${purchase.purchaseType === "inventory"
                                                             ? "bg-indigo-100 text-indigo-800"
                                                             : "bg-green-100 text-green-800"
                                                             }`}>
                                                             {purchase.purchaseType === "inventory" ? "Inventory" : "Order-Based"}
                                                         </span>
+                                                        {purchase.sourceStage && (
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs ${purchase.sourceStage === "intake"
+                                                                    ? "bg-orange-100 text-orange-800"
+                                                                    : "bg-purple-100 text-purple-800"
+                                                                }`}>
+                                                                Source: {purchase.sourceStage === "intake" ? "Intake" : "Materials"}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
 
