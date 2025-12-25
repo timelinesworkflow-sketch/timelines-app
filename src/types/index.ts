@@ -17,6 +17,9 @@ export type UserRole =
     | "delivery"
     | "purchase";
 
+// Marking sub-roles (sub-specializations within marking role)
+export type MarkingSubRole = "front_neck_marker" | "back_neck_marker" | "sleeve_marker";
+
 export interface User {
     email: string;
     staffId: string;
@@ -27,6 +30,10 @@ export interface User {
     createdAt: Timestamp;
     // Marking task capabilities (what tasks this staff CAN perform)
     markingTaskCapabilities?: string[];
+    // Marking sub-role (only for role = marking)
+    markingSubRole?: MarkingSubRole;
+    // Is this the default staff for their sub-role? (Only 1 per sub-role)
+    isDefaultForSubRole?: boolean;
 }
 
 export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "re_blouse" | "re_pavada_sattai" | "other";

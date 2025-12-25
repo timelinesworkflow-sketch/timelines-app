@@ -11,10 +11,18 @@ import {
     where,
     Timestamp,
 } from "firebase/firestore";
-import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask } from "@/types";
+import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, MarkingSubRole, User } from "@/types";
 
 const TEMPLATES_COLLECTION = "markingTemplates";
 const MARKING_TASKS_COLLECTION = "markingTasks";
+
+// Task name to sub-role mapping (for default assignment)
+const TASK_TO_SUBROLE_MAP: Record<string, MarkingSubRole> = {
+    "Front Neck Marking": "front_neck_marker",
+    "Back Neck Marking": "back_neck_marker",
+    "Sleeve / Putty Marking": "sleeve_marker",
+    "Sleeve Marking": "sleeve_marker",
+};
 
 // ============================================
 // DEFAULT MARKING TEMPLATES
@@ -64,6 +72,42 @@ export function getAllMarkingTaskNames(): string[] {
         tasks.forEach(task => allTasks.add(task.taskName));
     });
     return Array.from(allTasks).sort();
+}
+
+/**
+ * Get the default staff for a sub-role (if exactly 1 exists)
+ * Returns null if 0 or multiple defaults exist
+ */
+export async function getDefaultStaffForSubRole(
+    subRole: MarkingSubRole
+): Promise<{ staffId: string; name: string } | null> {
+    try {
+        const q = query(
+            collection(db, "users"),
+            where("role", "==", "marking"),
+            where("markingSubRole", "==", subRole),
+            where("isDefaultForSubRole", "==", true),
+            where("isActive", "==", true)
+        );
+        const snapshot = await getDocs(q);
+
+        // Only assign if EXACTLY 1 default exists
+        if (snapshot.size === 1) {
+            const user = snapshot.docs[0].data() as User;
+            return { staffId: user.staffId, name: user.name };
+        }
+        return null;
+    } catch (error) {
+        console.error("Failed to get default staff for sub-role:", error);
+        return null;
+    }
+}
+
+/**
+ * Get sub-role for a task name (for default assignment)
+ */
+export function getSubRoleForTask(taskName: string): MarkingSubRole | null {
+    return TASK_TO_SUBROLE_MAP[taskName] || null;
 }
 
 // ============================================
@@ -156,6 +200,7 @@ export async function saveTemplate(template: MarkingTemplate): Promise<void> {
 
 /**
  * Generate marking tasks for an order based on garment type
+ * Auto-assigns from default staff if exactly 1 default exists for the sub-role
  */
 export async function generateMarkingTasksForOrder(
     orderId: string,
@@ -166,6 +211,20 @@ export async function generateMarkingTasksForOrder(
 
     for (const templateTask of template.tasks) {
         const taskRef = doc(collection(db, MARKING_TASKS_COLLECTION));
+
+        // Check for default staff based on task's sub-role
+        let assignedStaffId: string | undefined;
+        let assignedStaffName: string | undefined;
+
+        const subRole = getSubRoleForTask(templateTask.taskName);
+        if (subRole) {
+            const defaultStaff = await getDefaultStaffForSubRole(subRole);
+            if (defaultStaff) {
+                assignedStaffId = defaultStaff.staffId;
+                assignedStaffName = defaultStaff.name;
+            }
+        }
+
         const task: MarkingTask = {
             taskId: taskRef.id,
             orderId,
@@ -173,6 +232,8 @@ export async function generateMarkingTasksForOrder(
             taskOrder: templateTask.taskOrder,
             isMandatory: templateTask.isMandatory,
             status: "not_started",
+            assignedStaffId,
+            assignedStaffName,
         };
 
         await setDoc(taskRef, task);

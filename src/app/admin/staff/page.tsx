@@ -6,7 +6,7 @@ import TopBar from "@/components/TopBar";
 import { collection, getDocs, setDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut as firebaseSignOut } from "firebase/auth";
 import { auth, db, secondaryAuth } from "@/lib/firebase";
-import { User, UserRole } from "@/types";
+import { User, UserRole, MarkingSubRole } from "@/types";
 import { Plus, Edit, Key, X, Trash2, Power } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -26,6 +26,8 @@ export default function AdminStaffPage() {
         staffId: "",
         role: "marking" as UserRole,
         isActive: true,
+        markingSubRole: "" as MarkingSubRole | "",
+        isDefaultForSubRole: false,
     });
 
     useEffect(() => {
@@ -72,7 +74,7 @@ export default function AdminStaffPage() {
                     : [formData.role.replace(/_checker$/, "")];
 
             // Create Firestore user document with Auth UID as document ID
-            await setDoc(doc(db, "users", userCredential.user.uid), {
+            const userData: Record<string, unknown> = {
                 email: formData.email,
                 staffId: formData.staffId,
                 name: formData.name,
@@ -80,7 +82,15 @@ export default function AdminStaffPage() {
                 allowedStages,
                 isActive: formData.isActive,
                 createdAt: serverTimestamp(),
-            });
+            };
+
+            // Add marking sub-role fields if applicable
+            if (formData.role === "marking" && formData.markingSubRole) {
+                userData.markingSubRole = formData.markingSubRole;
+                userData.isDefaultForSubRole = formData.isDefaultForSubRole;
+            }
+
+            await setDoc(doc(db, "users", userCredential.user.uid), userData);
 
             // Sign out from secondary auth to avoid any session conflicts
             await firebaseSignOut(secondaryAuth);
@@ -108,13 +118,24 @@ export default function AdminStaffPage() {
                     ? []
                     : [formData.role.replace(/_checker$/, "")];
 
-            await updateDoc(doc(db, "users", editingUser.uid), {
+            const updateData: Record<string, unknown> = {
                 name: formData.name,
                 staffId: formData.staffId,
                 role: formData.role,
                 allowedStages,
                 isActive: formData.isActive,
-            });
+            };
+
+            // Add or clear marking sub-role fields
+            if (formData.role === "marking") {
+                updateData.markingSubRole = formData.markingSubRole || null;
+                updateData.isDefaultForSubRole = formData.isDefaultForSubRole;
+            } else {
+                updateData.markingSubRole = null;
+                updateData.isDefaultForSubRole = false;
+            }
+
+            await updateDoc(doc(db, "users", editingUser.uid), updateData);
 
             setToast({ message: "User updated successfully!", type: "success" });
             setShowModal(false);
@@ -190,6 +211,8 @@ export default function AdminStaffPage() {
             staffId: "",
             role: "marking",
             isActive: true,
+            markingSubRole: "",
+            isDefaultForSubRole: false,
         });
     };
 
@@ -202,6 +225,8 @@ export default function AdminStaffPage() {
             staffId: user.staffId,
             role: user.role,
             isActive: user.isActive,
+            markingSubRole: user.markingSubRole || "",
+            isDefaultForSubRole: user.isDefaultForSubRole || false,
         });
         setShowModal(true);
     };
@@ -391,7 +416,7 @@ export default function AdminStaffPage() {
                                     <label className="label">Role *</label>
                                     <select
                                         value={formData.role}
-                                        onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
+                                        onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole, markingSubRole: "", isDefaultForSubRole: false })}
                                         className="input"
                                     >
                                         <option value="admin">Admin</option>
@@ -411,6 +436,46 @@ export default function AdminStaffPage() {
                                         <option value="delivery">Delivery</option>
                                     </select>
                                 </div>
+
+                                {/* Marking Sub-Role Section (only for marking role) */}
+                                {formData.role === "marking" && (
+                                    <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                                        <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-3">
+                                            Marking Sub-Role
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="label text-sm">Sub-Role</label>
+                                                <select
+                                                    value={formData.markingSubRole}
+                                                    onChange={(e) => setFormData({ ...formData, markingSubRole: e.target.value as MarkingSubRole | "" })}
+                                                    className="input"
+                                                >
+                                                    <option value="">Select Sub-Role</option>
+                                                    <option value="front_neck_marker">Front Neck Marker</option>
+                                                    <option value="back_neck_marker">Back Neck Marker</option>
+                                                    <option value="sleeve_marker">Sleeve Marker</option>
+                                                </select>
+                                            </div>
+                                            {formData.markingSubRole && (
+                                                <label className="flex items-center space-x-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.isDefaultForSubRole}
+                                                        onChange={(e) => setFormData({ ...formData, isDefaultForSubRole: e.target.checked })}
+                                                        className="w-4 h-4 text-orange-600 rounded"
+                                                    />
+                                                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                                                        Set as default for this sub-role
+                                                    </span>
+                                                </label>
+                                            )}
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Only 1 default per sub-role. New orders auto-assign to defaults.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="flex items-center space-x-2 cursor-pointer">
