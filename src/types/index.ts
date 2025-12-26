@@ -290,6 +290,49 @@ export interface MarkingTask {
 }
 
 // ============================================
+// CUTTING STAGE TYPES
+// ============================================
+
+// Cutting Task Status
+export type CuttingTaskStatus = "not_started" | "in_progress" | "completed" | "needs_rework" | "approved";
+
+// Cutting Template Task (definition in template)
+export interface CuttingTemplateTask {
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+}
+
+// Cutting Template (defines tasks for a garment type)
+export interface CuttingTemplate {
+    templateId: string;
+    garmentType: GarmentType;
+    tasks: CuttingTemplateTask[];
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+}
+
+// Cutting Task (order-specific instance of a template task)
+export interface CuttingTask {
+    taskId: string;
+    orderId: string;
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+    status: CuttingTaskStatus;
+    assignedStaffId?: string;
+    assignedStaffName?: string;
+    startedAt?: Timestamp;
+    completedAt?: Timestamp;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: Timestamp;
+    notes?: string;
+    // Dynamic sub-stage ID for eligibility/default matching
+    subStageId?: string;
+}
+
+// ============================================
 // MULTI-ITEM WORKFLOW TYPES
 // ============================================
 
