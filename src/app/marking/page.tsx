@@ -9,13 +9,12 @@ import { Order, MarkingTask, User } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     getMarkingTasksForOrder,
-    getMarkingTasksForStaff,
     generateMarkingTasksForOrder,
     startMarkingTask,
     completeMarkingTask,
     assignMarkingTask,
 } from "@/lib/markingTemplates";
-import { ClipboardList, Play, Check, User as UserIcon, RefreshCw, MessageSquare } from "lucide-react";
+import { ClipboardList, Play, Check, User as UserIcon, RefreshCw, AlertCircle, Calendar } from "lucide-react";
 import Toast from "@/components/Toast";
 
 interface OrderWithTasks {
@@ -75,9 +74,12 @@ export default function MarkingPage() {
                     tasks = await generateMarkingTasksForOrder(order.orderId, order.garmentType);
                 }
 
-                // Filter tasks for marking staff (only show assigned to them)
+                // Filter tasks for marking staff:
+                // Show tasks assigned to them OR unassigned tasks
                 if (isMarkingStaff) {
-                    tasks = tasks.filter(t => t.assignedStaffId === userData.staffId);
+                    tasks = tasks.filter(t =>
+                        t.assignedStaffId === userData.staffId || !t.assignedStaffId
+                    );
                 }
 
                 if (tasks.length > 0) {
@@ -140,177 +142,220 @@ export default function MarkingPage() {
         }
     };
 
-    const getStatusBadge = (status: string) => {
-        const styles: Record<string, string> = {
-            not_started: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
-            in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-            completed: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-            needs_rework: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-            approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    const getStatusConfig = (status: string) => {
+        const configs: Record<string, { bg: string; text: string; label: string }> = {
+            not_started: { bg: "bg-gray-200", text: "text-gray-700", label: "Not Started" },
+            in_progress: { bg: "bg-blue-500", text: "text-white", label: "In Progress" },
+            completed: { bg: "bg-amber-500", text: "text-white", label: "Completed" },
+            needs_rework: { bg: "bg-red-500", text: "text-white", label: "Needs Rework" },
+            approved: { bg: "bg-green-500", text: "text-white", label: "Approved" },
         };
-        return styles[status] || styles.not_started;
+        return configs[status] || configs.not_started;
+    };
+
+    const getDueDateStatus = (dueDate: any) => {
+        const due = dueDate?.toDate?.() || new Date(dueDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (diff < 0) return { color: "text-red-600", label: "Overdue" };
+        if (diff === 0) return { color: "text-amber-600", label: "Due Today" };
+        if (diff <= 2) return { color: "text-amber-500", label: `Due in ${diff} day${diff > 1 ? "s" : ""}` };
+        return { color: "text-gray-600", label: `Due in ${diff} days` };
     };
 
     return (
         <ProtectedRoute allowedRoles={["marking", "marking_checker", "supervisor", "admin"]}>
-            <div className="page-container min-h-screen">
+            <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
                 <TopBar />
 
-                <div className="page-content">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
-                                <ClipboardList className="w-8 h-8 text-orange-600" />
-                                <span>Marking Tasks</span>
-                            </h1>
-                            <p className="text-gray-600 dark:text-gray-400">
-                                {isMarkingStaff
-                                    ? "Complete your assigned marking tasks"
-                                    : "View and manage all marking tasks"}
-                            </p>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    {/* Header */}
+                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <ClipboardList className="w-6 h-6 text-orange-600" />
+                                    Marking Stage
+                                </h1>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    {isMarkingStaff
+                                        ? "Your assigned and available tasks"
+                                        : "All orders in marking stage"}
+                                </p>
+                            </div>
+                            <button
+                                onClick={loadData}
+                                disabled={loading}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                                Refresh
+                            </button>
                         </div>
-                        <button onClick={loadData} className="btn btn-outline flex items-center space-x-1">
-                            <RefreshCw className="w-4 h-4" />
-                            <span>Refresh</span>
-                        </button>
                     </div>
 
+                    {/* Content */}
                     {loading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-600 border-t-transparent"></div>
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
+                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-600 border-t-transparent mx-auto"></div>
+                            <p className="text-gray-500 dark:text-gray-400 mt-4">Loading tasks...</p>
                         </div>
                     ) : ordersWithTasks.length === 0 ? (
-                        <div className="card text-center py-12">
-                            <ClipboardList className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                            <p className="text-gray-600 dark:text-gray-400">
-                                {isMarkingStaff ? "No tasks assigned to you" : "No orders in marking stage"}
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
+                            <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                                No Tasks Found
+                            </h3>
+                            <p className="text-gray-500 dark:text-gray-400">
+                                {isMarkingStaff
+                                    ? "No marking tasks are assigned to you or available at the moment."
+                                    : "No orders are currently in the marking stage."}
                             </p>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            {ordersWithTasks.map(({ order, tasks }) => (
-                                <div key={order.orderId} className="card">
-                                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
-                                        <div>
-                                            <h3 className="font-semibold text-gray-900 dark:text-white">
-                                                {order.customerName}
-                                            </h3>
-                                            <p className="text-sm text-gray-500">
-                                                {order.garmentType.replace(/_/g, " ")} | Due: {order.dueDate.toDate().toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                            {order.orderId.slice(0, 8)}
-                                        </span>
-                                    </div>
+                        <div className="space-y-4">
+                            {ordersWithTasks.map(({ order, tasks }) => {
+                                const dueStatus = getDueDateStatus(order.dueDate);
 
-                                    <div className="space-y-3">
-                                        {tasks.map((task) => (
-                                            <div
-                                                key={task.taskId}
-                                                className={`p-4 rounded-lg border ${task.status === "needs_rework"
-                                                        ? "border-red-300 bg-red-50 dark:bg-red-900/10"
-                                                        : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-                                                    }`}
-                                            >
-                                                <div className="flex items-center justify-between flex-wrap gap-3">
-                                                    <div className="flex items-center space-x-3">
-                                                        <span className="text-sm font-mono text-gray-500">{task.taskOrder}.</span>
-                                                        <div>
-                                                            <span className="font-medium text-gray-900 dark:text-white">
-                                                                {task.taskName}
-                                                            </span>
-                                                            {task.isMandatory && (
-                                                                <span className="ml-2 text-xs text-red-600">*Required</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center space-x-2 flex-wrap gap-2">
-                                                        {/* Status Badge */}
-                                                        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(task.status)}`}>
-                                                            {task.status.replace(/_/g, " ")}
+                                return (
+                                    <div key={order.orderId} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                        {/* Order Header */}
+                                        <div className="bg-gray-50 dark:bg-gray-750 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                                                            {order.customerName}
+                                                        </h3>
+                                                        <span className="text-xs font-mono bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded">
+                                                            #{order.orderId.slice(0, 8)}
                                                         </span>
-
-                                                        {/* Assignment Dropdown (for admin/supervisor/checker) */}
-                                                        {canAssign && (
-                                                            <select
-                                                                value={task.assignedStaffId || ""}
-                                                                onChange={(e) => handleAssignTask(task.taskId, e.target.value)}
-                                                                disabled={actionLoading === task.taskId}
-                                                                className="text-xs px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
-                                                            >
-                                                                <option value="">Unassigned</option>
-                                                                {staffList.map((s) => (
-                                                                    <option key={s.staffId} value={s.staffId}>
-                                                                        {s.name}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        )}
-
-                                                        {/* Assigned Staff Badge (for marking staff view) */}
-                                                        {!canAssign && task.assignedStaffName && (
-                                                            <span className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-400">
-                                                                <UserIcon className="w-3 h-3" />
-                                                                <span>{task.assignedStaffName}</span>
-                                                            </span>
-                                                        )}
-
-                                                        {/* Action Buttons */}
-                                                        {task.status === "not_started" && task.assignedStaffId === userData?.staffId && (
-                                                            <button
-                                                                onClick={() => handleStartTask(task.taskId)}
-                                                                disabled={actionLoading === task.taskId}
-                                                                className="btn btn-primary btn-sm flex items-center space-x-1"
-                                                            >
-                                                                <Play className="w-3 h-3" />
-                                                                <span>Start</span>
-                                                            </button>
-                                                        )}
-
-                                                        {task.status === "in_progress" && task.assignedStaffId === userData?.staffId && (
-                                                            <button
-                                                                onClick={() => setNoteModal({ taskId: task.taskId, note: "" })}
-                                                                disabled={actionLoading === task.taskId}
-                                                                className="btn btn-primary btn-sm flex items-center space-x-1"
-                                                            >
-                                                                <Check className="w-3 h-3" />
-                                                                <span>Complete</span>
-                                                            </button>
-                                                        )}
-
-                                                        {task.status === "needs_rework" && task.assignedStaffId === userData?.staffId && (
-                                                            <button
-                                                                onClick={() => handleStartTask(task.taskId)}
-                                                                disabled={actionLoading === task.taskId}
-                                                                className="btn btn-primary btn-sm"
-                                                            >
-                                                                Restart
-                                                            </button>
-                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3 mt-1 text-sm">
+                                                        <span className="text-gray-600 dark:text-gray-400 capitalize">
+                                                            {order.garmentType.replace(/_/g, " ")}
+                                                        </span>
+                                                        <span className={`flex items-center gap-1 ${dueStatus.color}`}>
+                                                            <Calendar className="w-3 h-3" />
+                                                            {dueStatus.label}
+                                                        </span>
                                                     </div>
                                                 </div>
-
-                                                {task.notes && (
-                                                    <div className="mt-2 p-2 bg-white dark:bg-gray-900 rounded text-sm text-gray-600 dark:text-gray-400 flex items-start space-x-2">
-                                                        <MessageSquare className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                                        <span>{task.notes}</span>
-                                                    </div>
-                                                )}
+                                                <div className="text-sm text-gray-500">
+                                                    {tasks.filter(t => t.status === "completed" || t.status === "approved").length} / {tasks.length} done
+                                                </div>
                                             </div>
-                                        ))}
+                                        </div>
+
+                                        {/* Tasks Grid */}
+                                        <div className="p-4">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                {tasks.map((task) => {
+                                                    const statusConfig = getStatusConfig(task.status);
+                                                    const canStart = task.status === "not_started" && task.assignedStaffId === userData?.staffId;
+                                                    const canComplete = task.status === "in_progress" && task.assignedStaffId === userData?.staffId;
+                                                    const canRestart = task.status === "needs_rework" && task.assignedStaffId === userData?.staffId;
+
+                                                    return (
+                                                        <div
+                                                            key={task.taskId}
+                                                            className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-750"
+                                                        >
+                                                            {/* Task Header */}
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div>
+                                                                    <h4 className="font-medium text-gray-900 dark:text-white text-sm">
+                                                                        {task.taskName}
+                                                                    </h4>
+                                                                    {task.isMandatory && (
+                                                                        <span className="text-xs text-red-600">Required</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                                                                    {statusConfig.label}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Assignment */}
+                                                            <div className="mb-3">
+                                                                {canAssign ? (
+                                                                    <select
+                                                                        value={task.assignedStaffId || ""}
+                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value)}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="w-full text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                                                    >
+                                                                        <option value="">Unassigned</option>
+                                                                        {staffList.map((s) => (
+                                                                            <option key={s.staffId} value={s.staffId}>
+                                                                                {s.name}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                                                        <UserIcon className="w-3 h-3" />
+                                                                        <span>{task.assignedStaffName || "Unassigned"}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Actions */}
+                                                            <div className="flex gap-2">
+                                                                {canStart && (
+                                                                    <button
+                                                                        onClick={() => handleStartTask(task.taskId)}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+                                                                    >
+                                                                        <Play className="w-3 h-3" />
+                                                                        Start
+                                                                    </button>
+                                                                )}
+                                                                {canComplete && (
+                                                                    <button
+                                                                        onClick={() => setNoteModal({ taskId: task.taskId, note: "" })}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50"
+                                                                    >
+                                                                        <Check className="w-3 h-3" />
+                                                                        Complete
+                                                                    </button>
+                                                                )}
+                                                                {canRestart && (
+                                                                    <button
+                                                                        onClick={() => handleStartTask(task.taskId)}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded hover:bg-amber-700 disabled:opacity-50"
+                                                                    >
+                                                                        Restart
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Notes */}
+                                                            {task.notes && (
+                                                                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
+                                                                    {task.notes}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
 
                 {/* Complete with Note Modal */}
                 {noteModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 9998 }}>
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg max-w-md w-full p-6">
                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                                 Complete Task
                             </h3>
@@ -318,19 +363,19 @@ export default function MarkingPage() {
                                 value={noteModal.note}
                                 onChange={(e) => setNoteModal({ ...noteModal, note: e.target.value })}
                                 placeholder="Add notes (optional)"
-                                className="input h-24 mb-4"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white h-24 resize-none"
                             />
-                            <div className="flex space-x-3">
+                            <div className="flex gap-3 mt-4">
                                 <button
                                     onClick={() => setNoteModal(null)}
-                                    className="btn btn-outline flex-1"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={() => handleCompleteTask(noteModal.taskId, noteModal.note || undefined)}
                                     disabled={actionLoading === noteModal.taskId}
-                                    className="btn btn-primary flex-1"
+                                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
                                 >
                                     {actionLoading === noteModal.taskId ? "Saving..." : "Complete"}
                                 </button>
