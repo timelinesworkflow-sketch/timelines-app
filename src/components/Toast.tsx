@@ -32,12 +32,13 @@ export default function Toast({ message, type = "info", onClose, duration = 3000
 
     return (
         <div
-            className={`fixed top-4 right-4 left-4 sm:left-auto sm:min-w-96 z-50 flex items-center justify-between p-4 rounded-lg border ${bgColors[type]} ${textColors[type]} shadow-lg animate-fadeIn`}
+            className={`fixed top-4 right-4 left-4 sm:left-auto sm:min-w-96 max-w-md flex items-center justify-between p-4 rounded-lg border ${bgColors[type]} ${textColors[type]} shadow-lg animate-fadeIn`}
+            style={{ zIndex: 9999 }}
         >
-            <p className="text-sm font-medium">{message}</p>
+            <p className="text-sm font-medium flex-1">{message}</p>
             <button
                 onClick={onClose}
-                className="ml-4 p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                className="ml-4 p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors flex-shrink-0"
             >
                 <X className="w-4 h-4" />
             </button>

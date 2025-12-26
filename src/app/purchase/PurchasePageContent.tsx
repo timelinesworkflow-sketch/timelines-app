@@ -5,14 +5,14 @@ import TopBar from "@/components/TopBar";
 import Toast from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { PurchaseRequest, PurchaseType } from "@/types";
-import { getPurchasesByType, completePurchase } from "@/lib/purchases";
+import { getPendingPurchases, completePurchase } from "@/lib/purchases";
 import { recordMaterialPurchase } from "@/lib/inventory";
 import { Package, ShoppingCart, Warehouse, Check, AlertCircle, Calendar } from "lucide-react";
 import DateFilter, { DateFilterType, filterByDate } from "@/components/DateFilter";
 
 export default function PurchasePageContent() {
     const { userData } = useAuth();
-    const [activeTab, setActiveTab] = useState<PurchaseType>("inventory");
+    const [activeTab, setActiveTab] = useState<PurchaseType>("order");
     const [inventoryPurchases, setInventoryPurchases] = useState<PurchaseRequest[]>([]);
     const [orderPurchases, setOrderPurchases] = useState<PurchaseRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -27,12 +27,10 @@ export default function PurchasePageContent() {
     const loadPurchases = async () => {
         setLoading(true);
         try {
-            const [invPurchases, ordPurchases] = await Promise.all([
-                getPurchasesByType("inventory"),
-                getPurchasesByType("order"),
-            ]);
-            setInventoryPurchases(invPurchases.filter(p => p.status !== "completed" && p.status !== "cancelled"));
-            setOrderPurchases(ordPurchases.filter(p => p.status !== "completed" && p.status !== "cancelled"));
+            // Fetch all pending purchases and split by type client-side
+            const allPurchases = await getPendingPurchases();
+            setInventoryPurchases(allPurchases.filter(p => p.purchaseType === "inventory"));
+            setOrderPurchases(allPurchases.filter(p => p.purchaseType === "order"));
         } catch (error) {
             console.error("Failed to load purchases:", error);
             setToast({ message: "Failed to load purchases", type: "error" });
@@ -213,8 +211,8 @@ export default function PurchasePageContent() {
                                                         </span>
                                                         {purchase.sourceStage && (
                                                             <span className={`px-2 py-0.5 rounded-full text-xs ${purchase.sourceStage === "intake"
-                                                                    ? "bg-orange-100 text-orange-800"
-                                                                    : "bg-purple-100 text-purple-800"
+                                                                ? "bg-orange-100 text-orange-800"
+                                                                : "bg-purple-100 text-purple-800"
                                                                 }`}>
                                                                 Source: {purchase.sourceStage === "intake" ? "Intake" : "Materials"}
                                                             </span>
