@@ -17,8 +17,8 @@ export type UserRole =
     | "delivery"
     | "purchase";
 
-// Marking sub-roles (sub-specializations within marking role)
-export type MarkingSubRole = "front_neck_marker" | "back_neck_marker" | "sleeve_marker";
+// Stage types that support sub-stages (parallel tasks)
+export type SubStageParentRole = "marking" | "cutting" | "stitching";
 
 export interface User {
     email: string;
@@ -28,12 +28,12 @@ export interface User {
     allowedStages: string[];
     isActive: boolean;
     createdAt: Timestamp;
-    // Marking task capabilities (what tasks this staff CAN perform)
-    markingTaskCapabilities?: string[];
-    // Marking sub-role (only for role = marking)
-    markingSubRole?: MarkingSubRole;
-    // Is this the default staff for their sub-role? (Only 1 per sub-role)
-    isDefaultForSubRole?: boolean;
+    // Dynamic sub-stage eligibility - keys are sub-stage IDs from templates
+    // e.g., { "front_neck_marking": true, "back_neck_marking": true }
+    subStageEligibility?: Record<string, boolean>;
+    // Default assignment for sub-stages (sub-stage ID -> true if default for that sub-stage)
+    // Only 1 staff should be default per sub-stage
+    subStageDefaults?: Record<string, boolean>;
 }
 
 export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "re_blouse" | "re_pavada_sattai" | "other";
@@ -285,6 +285,8 @@ export interface MarkingTask {
     approvedByName?: string;
     approvedAt?: Timestamp;
     notes?: string;
+    // Dynamic sub-stage ID for eligibility/default matching
+    subStageId?: string;
 }
 
 // ============================================

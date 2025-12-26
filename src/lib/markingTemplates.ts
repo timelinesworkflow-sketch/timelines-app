@@ -11,21 +11,29 @@ import {
     where,
     Timestamp,
 } from "firebase/firestore";
-import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, MarkingSubRole, User } from "@/types";
+import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, User, SubStageParentRole } from "@/types";
 
 const TEMPLATES_COLLECTION = "markingTemplates";
 const MARKING_TASKS_COLLECTION = "markingTasks";
 
-// Task name to sub-role mapping (for default assignment)
-const TASK_TO_SUBROLE_MAP: Record<string, MarkingSubRole> = {
-    "Front Neck Marking": "front_neck_marker",
-    "Back Neck Marking": "back_neck_marker",
-    "Sleeve / Putty Marking": "sleeve_marker",
-    "Sleeve Marking": "sleeve_marker",
-};
+// ============================================
+// SUB-STAGE ID GENERATION
+// ============================================
+
+/**
+ * Generate a consistent sub-stage ID from task name
+ * e.g., "Front Neck Marking" -> "front_neck_marking"
+ */
+export function generateSubStageId(taskName: string): string {
+    return taskName
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .replace(/\s+/g, "_")
+        .trim();
+}
 
 // ============================================
-// DEFAULT MARKING TEMPLATES
+// DEFAULT MARKING TEMPLATES (with sub-stage IDs)
 // ============================================
 
 export const DEFAULT_MARKING_TEMPLATES: Record<GarmentType, MarkingTemplateTask[]> = {
@@ -65,49 +73,80 @@ export const DEFAULT_MARKING_TEMPLATES: Record<GarmentType, MarkingTemplateTask[
     ],
 };
 
-// Get all unique task names for capability selection
-export function getAllMarkingTaskNames(): string[] {
-    const allTasks = new Set<string>();
-    Object.values(DEFAULT_MARKING_TEMPLATES).forEach(tasks => {
-        tasks.forEach(task => allTasks.add(task.taskName));
-    });
-    return Array.from(allTasks).sort();
+// ============================================
+// DYNAMIC SUB-STAGE FUNCTIONS
+// ============================================
+
+/**
+ * Get all unique sub-stages from all templates for a stage type
+ * Returns array of { subStageId, subStageName } for staff management UI
+ */
+export async function getAllActiveSubStages(
+    stageType: SubStageParentRole = "marking"
+): Promise<{ subStageId: string; subStageName: string }[]> {
+    const subStages = new Map<string, string>();
+
+    // First, collect from default templates
+    if (stageType === "marking") {
+        Object.values(DEFAULT_MARKING_TEMPLATES).forEach(tasks => {
+            tasks.forEach(task => {
+                const subStageId = generateSubStageId(task.taskName);
+                subStages.set(subStageId, task.taskName);
+            });
+        });
+    }
+
+    // Then, collect from Firestore templates (may have custom sub-stages)
+    try {
+        const snapshot = await getDocs(collection(db, TEMPLATES_COLLECTION));
+        snapshot.docs.forEach(doc => {
+            const template = doc.data() as MarkingTemplate;
+            template.tasks?.forEach(task => {
+                const subStageId = generateSubStageId(task.taskName);
+                subStages.set(subStageId, task.taskName);
+            });
+        });
+    } catch (error) {
+        console.error("Failed to fetch templates:", error);
+    }
+
+    return Array.from(subStages.entries())
+        .map(([subStageId, subStageName]) => ({ subStageId, subStageName }))
+        .sort((a, b) => a.subStageName.localeCompare(b.subStageName));
 }
 
 /**
- * Get the default staff for a sub-role (if exactly 1 exists)
+ * Get the default staff for a sub-stage ID (if exactly 1 exists)
  * Returns null if 0 or multiple defaults exist
  */
-export async function getDefaultStaffForSubRole(
-    subRole: MarkingSubRole
+export async function getDefaultStaffForSubStage(
+    subStageId: string
 ): Promise<{ staffId: string; name: string } | null> {
     try {
+        // Query all active marking staff (Firestore doesn't support nested field queries well)
         const q = query(
             collection(db, "users"),
-            where("role", "==", "marking"),
-            where("markingSubRole", "==", subRole),
-            where("isDefaultForSubRole", "==", true),
             where("isActive", "==", true)
         );
         const snapshot = await getDocs(q);
 
+        // Filter for staff who have this sub-stage as default
+        const defaultStaff = snapshot.docs
+            .map(doc => doc.data() as User)
+            .filter(user =>
+                (user.role === "marking" || user.role === "cutting" || user.role === "stitching") &&
+                user.subStageDefaults?.[subStageId] === true
+            );
+
         // Only assign if EXACTLY 1 default exists
-        if (snapshot.size === 1) {
-            const user = snapshot.docs[0].data() as User;
-            return { staffId: user.staffId, name: user.name };
+        if (defaultStaff.length === 1) {
+            return { staffId: defaultStaff[0].staffId, name: defaultStaff[0].name };
         }
         return null;
     } catch (error) {
-        console.error("Failed to get default staff for sub-role:", error);
+        console.error("Failed to get default staff for sub-stage:", error);
         return null;
     }
-}
-
-/**
- * Get sub-role for a task name (for default assignment)
- */
-export function getSubRoleForTask(taskName: string): MarkingSubRole | null {
-    return TASK_TO_SUBROLE_MAP[taskName] || null;
 }
 
 // ============================================
@@ -200,7 +239,7 @@ export async function saveTemplate(template: MarkingTemplate): Promise<void> {
 
 /**
  * Generate marking tasks for an order based on garment type
- * Auto-assigns from default staff if exactly 1 default exists for the sub-role
+ * Auto-assigns from default staff if exactly 1 default exists for the sub-stage
  */
 export async function generateMarkingTasksForOrder(
     orderId: string,
@@ -212,17 +251,17 @@ export async function generateMarkingTasksForOrder(
     for (const templateTask of template.tasks) {
         const taskRef = doc(collection(db, MARKING_TASKS_COLLECTION));
 
-        // Check for default staff based on task's sub-role
+        // Generate sub-stage ID from task name
+        const subStageId = generateSubStageId(templateTask.taskName);
+
+        // Check for default staff based on sub-stage ID
         let assignedStaffId: string | undefined;
         let assignedStaffName: string | undefined;
 
-        const subRole = getSubRoleForTask(templateTask.taskName);
-        if (subRole) {
-            const defaultStaff = await getDefaultStaffForSubRole(subRole);
-            if (defaultStaff) {
-                assignedStaffId = defaultStaff.staffId;
-                assignedStaffName = defaultStaff.name;
-            }
+        const defaultStaff = await getDefaultStaffForSubStage(subStageId);
+        if (defaultStaff) {
+            assignedStaffId = defaultStaff.staffId;
+            assignedStaffName = defaultStaff.name;
         }
 
         const task: MarkingTask = {
@@ -234,6 +273,7 @@ export async function generateMarkingTasksForOrder(
             status: "not_started",
             assignedStaffId,
             assignedStaffName,
+            subStageId, // Store sub-stage ID for lookups
         };
 
         await setDoc(taskRef, task);
