@@ -16,6 +16,7 @@ import {
     InventorySummary
 } from "@/lib/inventory";
 import { createPurchaseRequest, getCompletedOrderPurchases, addPurchasedMaterialToInventory } from "@/lib/purchases";
+import { generateMarkingTasksForOrder } from "@/lib/markingTemplates";
 import { PurchaseRequest } from "@/types";
 import { Timestamp } from "firebase/firestore";
 import {
@@ -248,6 +249,11 @@ export default function MaterialsPage() {
                     completedAt: Timestamp.now(),
                 },
             });
+
+            // Generate marking tasks if moving to marking stage
+            if (nextStage === "marking") {
+                await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+            }
 
             await addTimelineEntry(currentOrder.orderId, {
                 staffId: userData.staffId,

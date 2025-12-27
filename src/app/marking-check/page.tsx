@@ -15,6 +15,7 @@ import {
     assignMarkingTask,
     areAllMarkingTasksApproved,
 } from "@/lib/markingTemplates";
+import { generateCuttingTasksForOrder } from "@/lib/cuttingTemplates";
 import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -148,6 +149,12 @@ export default function MarkingCheckPage() {
             await updateDoc(doc(db, "orders", orderId), {
                 currentStage: "cutting",
             });
+
+            // Generate cutting tasks
+            const order = ordersWithTasks.find(o => o.order.orderId === orderId);
+            if (order) {
+                await generateCuttingTasksForOrder(orderId, order.order.garmentType);
+            }
 
             setToast({ message: "Marking complete! Order moved to Cutting", type: "success" });
             loadData();
@@ -283,8 +290,8 @@ export default function MarkingCheckPage() {
                                                         onClick={() => handleCompleteMarking(order.orderId)}
                                                         disabled={!progress.allApproved || actionLoading === order.orderId}
                                                         className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${progress.allApproved
-                                                                ? "bg-green-600 text-white hover:bg-green-700"
-                                                                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                                            ? "bg-green-600 text-white hover:bg-green-700"
+                                                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
                                                             }`}
                                                     >
                                                         {actionLoading === order.orderId ? "..." : "Complete"}
@@ -305,10 +312,10 @@ export default function MarkingCheckPage() {
                                                         <div
                                                             key={task.taskId}
                                                             className={`border rounded-lg p-3 ${task.status === "approved"
-                                                                    ? "border-green-300 bg-green-50 dark:bg-green-900/10 dark:border-green-800"
-                                                                    : task.status === "needs_rework"
-                                                                        ? "border-red-300 bg-red-50 dark:bg-red-900/10 dark:border-red-800"
-                                                                        : "border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-750"
+                                                                ? "border-green-300 bg-green-50 dark:bg-green-900/10 dark:border-green-800"
+                                                                : task.status === "needs_rework"
+                                                                    ? "border-red-300 bg-red-50 dark:bg-red-900/10 dark:border-red-800"
+                                                                    : "border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-750"
                                                                 }`}
                                                         >
                                                             {/* Task Header */}
