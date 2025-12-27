@@ -238,7 +238,8 @@ export default function MaterialsPage() {
             const nextStage = getNextStage("materials", currentOrder.activeStages);
 
             // Update order
-            await updateOrder(currentOrder.orderId, {
+            // Prepare updates
+            const updates: any = {
                 currentStage: nextStage || "completed",
                 status: nextStage ? "in_progress" : "completed",
                 materials: {
@@ -248,12 +249,16 @@ export default function MaterialsPage() {
                     completedByStaffName: userData.name,
                     completedAt: Timestamp.now(),
                 },
-            });
+            };
 
             // Generate marking tasks if moving to marking stage
             if (nextStage === "marking") {
-                await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+                const markingTasks = await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+                updates.markingTasks = markingTasks;
             }
+
+            // Update order
+            await updateOrder(currentOrder.orderId, updates);
 
             await addTimelineEntry(currentOrder.orderId, {
                 staffId: userData.staffId,

@@ -124,13 +124,23 @@ export default function CuttingPage() {
         }
     };
 
-    const handleAssignTask = async (taskId: string, staffId: string) => {
+    const handleAssignTask = async (taskId: string, staffId: string, orderId: string) => {
         const staff = staffList.find(s => s.staffId === staffId);
-        if (!staff) return;
+        if (!staff || !userData) return;
 
         setActionLoading(taskId);
         try {
-            await assignCuttingTask(taskId, staffId, staff.name);
+            await assignCuttingTask(
+                taskId,
+                orderId,
+                staffId,
+                staff.name,
+                {
+                    staffId: userData.staffId,
+                    staffName: userData.name,
+                    role: userData.role as "admin" | "supervisor"
+                }
+            );
             setToast({ message: `Assigned to ${staff.name}`, type: "success" });
             loadData();
         } catch (error) {
@@ -281,7 +291,7 @@ export default function CuttingPage() {
                                                                 {canAssign ? (
                                                                     <select
                                                                         value={task.assignedStaffId || ""}
-                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value)}
+                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value, order.orderId)}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="w-full text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                                                                     >

@@ -87,6 +87,7 @@ export default function AdminOrdersPage() {
                 orderId,
                 itemId: orderId, // Using orderId as itemId for order-level assignment
                 itemIndex: 0,
+                targetType: "order_item" as const,
                 currentStaffId: undefined,
                 currentStaffName: undefined,
             }));
@@ -210,8 +211,8 @@ export default function AdminOrdersPage() {
                                             <button
                                                 onClick={(e) => toggleOrderSelection(order.orderId, e)}
                                                 className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${selectedOrders.has(order.orderId)
-                                                        ? "bg-indigo-600 border-indigo-600 text-white"
-                                                        : "border-gray-300 dark:border-gray-600 hover:border-indigo-400"
+                                                    ? "bg-indigo-600 border-indigo-600 text-white"
+                                                    : "border-gray-300 dark:border-gray-600 hover:border-indigo-400"
                                                     }`}
                                             >
                                                 {selectedOrders.has(order.orderId) && <Check className="w-4 h-4" />}

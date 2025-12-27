@@ -12,17 +12,20 @@ import {
     orderBy,
     Timestamp,
 } from "firebase/firestore";
-import { AssignmentAuditLog } from "@/types";
+import { AssignmentAuditLog, AssignmentTarget } from "@/types";
 
 const ASSIGNMENT_LOGS_COLLECTION = "assignmentLogs";
 
 /**
- * Assign an item to a staff member and create audit log
+ * Assign an item or stage task to a staff member and create audit log
  */
 export async function assignItemToStaff(data: {
     orderId: string;
-    itemId: string;
-    itemIndex: number;
+    itemId: string; // Creates confusion? this is itemId or taskId
+    itemIndex?: number; // Required for order_item
+    targetType: AssignmentTarget;
+    stage?: string; // Required for stage_task
+    subStage?: string; // Optional for stage_task
     currentStaffId?: string;
     currentStaffName?: string;
     newStaffId: string;
@@ -35,6 +38,9 @@ export async function assignItemToStaff(data: {
         orderId,
         itemId,
         itemIndex,
+        targetType,
+        stage,
+        subStage,
         currentStaffId,
         currentStaffName,
         newStaffId,
@@ -44,19 +50,53 @@ export async function assignItemToStaff(data: {
         assignedByRole,
     } = data;
 
-    // Update the order's item with new assignment
-    const orderRef = doc(db, "orders", orderId);
-    await updateDoc(orderRef, {
-        [`items.${itemIndex}.assignedStaffId`]: newStaffId,
-        [`items.${itemIndex}.assignedStaffName`]: newStaffName,
-    });
+    // 1. Perform Assignment Update based on Target Type
+    if (targetType === "order_item") {
+        if (typeof itemIndex !== "number") {
+            throw new Error("Item index is required for order item assignment");
+        }
+        // Update the order's item with new assignment
+        // Use computed property names for dynamic path
+        const orderRef = doc(db, "orders", orderId);
+        await updateDoc(orderRef, {
+            [`items.${itemIndex}.assignedStaffId`]: newStaffId,
+            [`items.${itemIndex}.assignedStaffName`]: newStaffName,
+        });
 
-    // Create audit log entry
+    } else if (targetType === "stage_task") {
+        if (!stage) throw new Error("Stage is required for stage task assignment");
+
+        if (stage === "marking") {
+            // New Embedded Logic for Marking
+            // Update order document directly: markingTasks.{subTaskId}.assignedStaffId
+            const orderRef = doc(db, "orders", orderId);
+            await updateDoc(orderRef, {
+                [`markingTasks.${itemId}.assignedStaffId`]: newStaffId,
+                [`markingTasks.${itemId}.assignedStaffName`]: newStaffName,
+            });
+        } else {
+            // Legacy/Collection Logic for Cutting (and others)
+            let collectionName = "";
+            if (stage === "cutting") collectionName = "cuttingTasks";
+            else throw new Error(`Unsupported stage for task assignment: ${stage}`);
+
+            const taskRef = doc(db, collectionName, itemId);
+            await updateDoc(taskRef, {
+                assignedStaffId: newStaffId,
+                assignedStaffName: newStaffName,
+            });
+        }
+    }
+
+    // 2. Create Audit Log Entry
     const logRef = doc(collection(db, ASSIGNMENT_LOGS_COLLECTION));
     const auditLog: AssignmentAuditLog = {
         logId: logRef.id,
         itemId,
         orderId,
+        assignmentTarget: targetType,
+        stage,
+        subStage,
         assignedFromStaffId: currentStaffId,
         assignedFromStaffName: currentStaffName,
         assignedToStaffId: newStaffId,
@@ -75,7 +115,10 @@ export async function assignItemToStaff(data: {
 export async function bulkAssignItems(assignments: {
     orderId: string;
     itemId: string;
-    itemIndex: number;
+    itemIndex?: number;
+    targetType: AssignmentTarget;
+    stage?: string;
+    subStage?: string;
     currentStaffId?: string;
     currentStaffName?: string;
 }[], newStaffId: string, newStaffName: string, assignedBy: {
@@ -88,11 +131,7 @@ export async function bulkAssignItems(assignments: {
     for (const assignment of assignments) {
         try {
             await assignItemToStaff({
-                orderId: assignment.orderId,
-                itemId: assignment.itemId,
-                itemIndex: assignment.itemIndex,
-                currentStaffId: assignment.currentStaffId,
-                currentStaffName: assignment.currentStaffName,
+                ...assignment,
                 newStaffId,
                 newStaffName,
                 assignedByStaffId: assignedBy.staffId,
@@ -101,7 +140,7 @@ export async function bulkAssignItems(assignments: {
             });
             successCount++;
         } catch (error) {
-            console.error(`Failed to assign item ${assignment.itemId}:`, error);
+            console.error(`Failed to assign ${assignment.targetType} ${assignment.itemId}:`, error);
         }
     }
 

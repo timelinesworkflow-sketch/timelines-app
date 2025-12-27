@@ -231,11 +231,17 @@ export interface PurchaseRequest {
     addedToInventoryQuantity?: number;
 }
 
+// Assignment Target Type
+export type AssignmentTarget = "order_item" | "stage_task";
+
 // Assignment Audit Log (tracks all staff assignments - append-only)
 export interface AssignmentAuditLog {
     logId: string;
-    itemId: string;
+    itemId: string; // Used as task ID for stage tasks
     orderId: string;
+    assignmentTarget: AssignmentTarget; // Discriminator
+    stage?: string;        // E.g. "marking", "cutting"
+    subStage?: string;     // E.g. "front_neck", "lining_cutting"
     assignedFromStaffId?: string;
     assignedFromStaffName?: string;
     assignedToStaffId: string;
@@ -416,7 +422,27 @@ export interface Order {
     overallStatus?: OverallOrderStatus;  // Computed from item statuses
     // RE Work workflow
     includeREWork?: boolean;     // For RE categories - includes RE Work stage
+
+    // Embedded Marking Tasks (Parallel Workflow)
+    markingTasks?: MarkingTaskMap;
 }
+
+export interface SubTask {
+    taskId: string;          // e.g. "front_neck"
+    taskName: string;        // e.g. "Front Neck"
+    status: "not_started" | "in_progress" | "completed" | "approved" | "needs_rework";
+    assignedStaffId?: string;
+    assignedStaffName?: string;
+    completedAt?: Timestamp;
+    approvedAt?: Timestamp;
+    approvedBy?: string;
+    approvedByName?: string;
+    notes?: string;
+    isMandatory: boolean;
+    taskOrder: number;
+}
+
+export type MarkingTaskMap = Record<string, SubTask>;
 
 export interface TimelineEntry {
     staffId: string;

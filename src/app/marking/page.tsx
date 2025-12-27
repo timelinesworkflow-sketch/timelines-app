@@ -5,21 +5,20 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, MarkingTask, User } from "@/types";
+import { Order, SubTask, User } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-    getMarkingTasksForOrder,
-    generateMarkingTasksForOrder,
     startMarkingTask,
     completeMarkingTask,
     assignMarkingTask,
+    ensureMarkingTasks,
 } from "@/lib/markingTemplates";
 import { ClipboardList, Play, Check, User as UserIcon, RefreshCw, AlertCircle, Calendar } from "lucide-react";
 import Toast from "@/components/Toast";
 
 interface OrderWithTasks {
     order: Order;
-    tasks: MarkingTask[];
+    tasks: SubTask[];
 }
 
 export default function MarkingPage() {
@@ -29,7 +28,7 @@ export default function MarkingPage() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-    const [noteModal, setNoteModal] = useState<{ taskId: string; note: string } | null>(null);
+    const [noteModal, setNoteModal] = useState<{ taskId: string; orderId: string; note: string } | null>(null);
 
     const isMarkingStaff = userData?.role === "marking";
     const canAssign = userData?.role === "admin" || userData?.role === "supervisor" || userData?.role === "marking_checker";
@@ -63,23 +62,41 @@ export default function MarkingPage() {
             const snapshot = await getDocs(q);
             const orders = snapshot.docs.map((doc) => doc.data() as Order);
 
-            // Load tasks for each order
+            // Process orders (Client-side filtering for visibility)
             const ordersWithTasksData: OrderWithTasks[] = [];
 
             for (const order of orders) {
-                let tasks = await getMarkingTasksForOrder(order.orderId);
+                // Get tasks from embedded map (lazily migrate if needed)
+                const tasksMap = await ensureMarkingTasks(order);
+                let tasks: SubTask[] = Object.values(tasksMap);
 
-                // Generate tasks if none exist
-                if (tasks.length === 0) {
-                    tasks = await generateMarkingTasksForOrder(order.orderId, order.garmentType);
-                }
+                // Sort by taskOrder
+                tasks.sort((a, b) => a.taskOrder - b.taskOrder);
 
-                // Filter tasks for marking staff:
-                // Show tasks assigned to them OR unassigned tasks
+                // Filter tasks for marking staff visibility rule:
+                // Show order if ANY task is:
+                // 1. Assigned to them
+                // 2. OR Unassigned (available to pick)
+                // AND not completed (optional, but requested "is not completed")
+
                 if (isMarkingStaff) {
-                    tasks = tasks.filter(t =>
-                        t.assignedStaffId === userData.staffId || !t.assignedStaffId
+                    // Check if this order has ANY relevant tasks for this staff
+                    // We DO NOT filter the tasks array itself because specific staff might need context of other tasks?
+                    // "Show an order to a staff member if any marking sub-task: is assigned to them..."
+                    // Usually staff sees ONLY their tasks to avoid confusion, simpler to show only relevant tasks.
+
+                    const relevantTasks = tasks.filter(t =>
+                        (t.assignedStaffId === userData.staffId && t.status !== "completed" && t.status !== "approved") ||
+                        (!t.assignedStaffId && t.status !== "completed" && t.status !== "approved")
                     );
+
+                    if (relevantTasks.length === 0) {
+                        continue; // Skip this order entirely
+                    }
+
+                    // For the view, should we show only relevant tasks or all?
+                    // "View only their assigned sub-task" implies filtering the list too.
+                    tasks = relevantTasks;
                 }
 
                 if (tasks.length > 0) {
@@ -90,16 +107,16 @@ export default function MarkingPage() {
             setOrdersWithTasks(ordersWithTasksData);
         } catch (error) {
             console.error("Failed to load data:", error);
-            setToast({ message: "Failed to load tasks", type: "error" });
+            setToast({ message: "Failed to load orders", type: "error" });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleStartTask = async (taskId: string) => {
+    const handleStartTask = async (orderId: string, taskId: string) => {
         setActionLoading(taskId);
         try {
-            await startMarkingTask(taskId);
+            await startMarkingTask(orderId, taskId);
             setToast({ message: "Task started!", type: "success" });
             loadData();
         } catch (error) {
@@ -110,10 +127,10 @@ export default function MarkingPage() {
         }
     };
 
-    const handleCompleteTask = async (taskId: string, notes?: string) => {
+    const handleCompleteTask = async (orderId: string, taskId: string, notes?: string) => {
         setActionLoading(taskId);
         try {
-            await completeMarkingTask(taskId, notes);
+            await completeMarkingTask(orderId, taskId, notes);
             setToast({ message: "Task completed!", type: "success" });
             setNoteModal(null);
             loadData();
@@ -125,13 +142,23 @@ export default function MarkingPage() {
         }
     };
 
-    const handleAssignTask = async (taskId: string, staffId: string) => {
+    const handleAssignTask = async (taskId: string, staffId: string, orderId: string) => {
         const staff = staffList.find(s => s.staffId === staffId);
-        if (!staff) return;
+        if (!staff || !userData) return;
 
         setActionLoading(taskId);
         try {
-            await assignMarkingTask(taskId, staffId, staff.name);
+            await assignMarkingTask(
+                taskId,
+                orderId,
+                staffId,
+                staff.name,
+                {
+                    staffId: userData.staffId,
+                    staffName: userData.name,
+                    role: userData.role as "admin" | "supervisor"
+                }
+            );
             setToast({ message: `Assigned to ${staff.name}`, type: "success" });
             loadData();
         } catch (error) {
@@ -217,6 +244,8 @@ export default function MarkingPage() {
                         <div className="space-y-4">
                             {ordersWithTasks.map(({ order, tasks }) => {
                                 const dueStatus = getDueDateStatus(order.dueDate);
+                                const totalTasks = order.markingTasks ? Object.keys(order.markingTasks).length : 0;
+                                const completedTasks = order.markingTasks ? Object.values(order.markingTasks).filter(t => t.status === "completed" || t.status === "approved").length : 0;
 
                                 return (
                                     <div key={order.orderId} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -243,7 +272,7 @@ export default function MarkingPage() {
                                                     </div>
                                                 </div>
                                                 <div className="text-sm text-gray-500">
-                                                    {tasks.filter(t => t.status === "completed" || t.status === "approved").length} / {tasks.length} done
+                                                    {completedTasks} / {totalTasks} done
                                                 </div>
                                             </div>
                                         </div>
@@ -282,9 +311,9 @@ export default function MarkingPage() {
                                                                 {canAssign ? (
                                                                     <select
                                                                         value={task.assignedStaffId || ""}
-                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value)}
+                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value, order.orderId)}
                                                                         disabled={actionLoading === task.taskId}
-                                                                        className="w-full text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                                                        className="text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-orange-500 max-w-[120px]"
                                                                     >
                                                                         <option value="">Unassigned</option>
                                                                         {staffList.map((s) => (
@@ -305,7 +334,7 @@ export default function MarkingPage() {
                                                             <div className="flex gap-2">
                                                                 {canStart && (
                                                                     <button
-                                                                        onClick={() => handleStartTask(task.taskId)}
+                                                                        onClick={() => handleStartTask(order.orderId, task.taskId)}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
                                                                     >
@@ -315,7 +344,7 @@ export default function MarkingPage() {
                                                                 )}
                                                                 {canComplete && (
                                                                     <button
-                                                                        onClick={() => setNoteModal({ taskId: task.taskId, note: "" })}
+                                                                        onClick={() => setNoteModal({ taskId: task.taskId, orderId: order.orderId, note: "" })}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50"
                                                                     >
@@ -325,7 +354,7 @@ export default function MarkingPage() {
                                                                 )}
                                                                 {canRestart && (
                                                                     <button
-                                                                        onClick={() => handleStartTask(task.taskId)}
+                                                                        onClick={() => handleStartTask(order.orderId, task.taskId)}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded hover:bg-amber-700 disabled:opacity-50"
                                                                     >
@@ -373,7 +402,7 @@ export default function MarkingPage() {
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={() => handleCompleteTask(noteModal.taskId, noteModal.note || undefined)}
+                                    onClick={() => handleCompleteTask(noteModal.orderId, noteModal.taskId, noteModal.note || undefined)}
                                     disabled={actionLoading === noteModal.taskId}
                                     className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
                                 >

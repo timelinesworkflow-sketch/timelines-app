@@ -5,15 +5,14 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, query, where, orderBy, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, MarkingTask, User } from "@/types";
+import { Order, SubTask, User } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-    getMarkingTasksForOrder,
-    generateMarkingTasksForOrder,
     approveMarkingTask,
     rejectMarkingTask,
     assignMarkingTask,
     areAllMarkingTasksApproved,
+    ensureMarkingTasks,
 } from "@/lib/markingTemplates";
 import { generateCuttingTasksForOrder } from "@/lib/cuttingTemplates";
 import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
@@ -21,7 +20,7 @@ import Toast from "@/components/Toast";
 
 interface OrderWithTasks {
     order: Order;
-    tasks: MarkingTask[];
+    tasks: SubTask[];
 }
 
 export default function MarkingCheckPage() {
@@ -31,7 +30,7 @@ export default function MarkingCheckPage() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-    const [rejectModal, setRejectModal] = useState<{ taskId: string; reason: string } | null>(null);
+    const [rejectModal, setRejectModal] = useState<{ taskId: string; orderId: string; reason: string } | null>(null);
 
     useEffect(() => {
         loadData();
@@ -60,18 +59,20 @@ export default function MarkingCheckPage() {
             const snapshot = await getDocs(q);
             const orders = snapshot.docs.map((doc) => doc.data() as Order);
 
-            // Load tasks for each order
+            // Process orders
             const ordersWithTasksData: OrderWithTasks[] = [];
 
             for (const order of orders) {
-                let tasks = await getMarkingTasksForOrder(order.orderId);
+                // Get tasks from embedded map (lazily migrate if needed)
+                const tasksMap = await ensureMarkingTasks(order);
+                let tasks: SubTask[] = Object.values(tasksMap);
 
-                // Generate tasks if none exist
-                if (tasks.length === 0) {
-                    tasks = await generateMarkingTasksForOrder(order.orderId, order.garmentType);
+                // Sort by taskOrder
+                tasks.sort((a, b) => a.taskOrder - b.taskOrder);
+
+                if (tasks.length > 0) {
+                    ordersWithTasksData.push({ order, tasks });
                 }
-
-                ordersWithTasksData.push({ order, tasks });
             }
 
             setOrdersWithTasks(ordersWithTasksData);
@@ -83,12 +84,12 @@ export default function MarkingCheckPage() {
         }
     };
 
-    const handleApproveTask = async (taskId: string) => {
+    const handleApproveTask = async (orderId: string, taskId: string) => {
         if (!userData) return;
 
         setActionLoading(taskId);
         try {
-            await approveMarkingTask(taskId, userData.staffId, userData.name);
+            await approveMarkingTask(orderId, taskId, userData.staffId, userData.name);
             setToast({ message: "Task approved!", type: "success" });
             loadData();
         } catch (error) {
@@ -107,7 +108,7 @@ export default function MarkingCheckPage() {
 
         setActionLoading(rejectModal.taskId);
         try {
-            await rejectMarkingTask(rejectModal.taskId, rejectModal.reason);
+            await rejectMarkingTask(rejectModal.orderId, rejectModal.taskId, rejectModal.reason);
             setToast({ message: "Task sent for rework", type: "info" });
             setRejectModal(null);
             loadData();
@@ -119,13 +120,23 @@ export default function MarkingCheckPage() {
         }
     };
 
-    const handleAssignTask = async (taskId: string, staffId: string) => {
+    const handleAssignTask = async (taskId: string, staffId: string, orderId: string) => {
         const staff = staffList.find(s => s.staffId === staffId);
-        if (!staff) return;
+        if (!staff || !userData) return;
 
         setActionLoading(taskId);
         try {
-            await assignMarkingTask(taskId, staffId, staff.name);
+            await assignMarkingTask(
+                taskId,
+                orderId,
+                staffId,
+                staff.name,
+                {
+                    staffId: userData.staffId,
+                    staffName: userData.name,
+                    role: userData.role as "admin" | "supervisor"
+                }
+            );
             setToast({ message: `Assigned to ${staff.name}`, type: "success" });
             loadData();
         } catch (error) {
@@ -139,7 +150,12 @@ export default function MarkingCheckPage() {
     const handleCompleteMarking = async (orderId: string) => {
         setActionLoading(orderId);
         try {
-            const allApproved = await areAllMarkingTasksApproved(orderId);
+            // Find order to check tasks locally first to avoid unnecessary call?
+            // But areAllMarkingTasksApproved logic is simple enough to just pass map
+            const order = ordersWithTasks.find(o => o.order.orderId === orderId);
+            if (!order) return;
+
+            const allApproved = areAllMarkingTasksApproved(order.order.markingTasks);
             if (!allApproved) {
                 setToast({ message: "All tasks must be approved first", type: "error" });
                 return;
@@ -151,10 +167,8 @@ export default function MarkingCheckPage() {
             });
 
             // Generate cutting tasks
-            const order = ordersWithTasks.find(o => o.order.orderId === orderId);
-            if (order) {
-                await generateCuttingTasksForOrder(orderId, order.order.garmentType);
-            }
+            // NOTE: Cutting tasks still use old collection method for now
+            await generateCuttingTasksForOrder(orderId, order.order.garmentType);
 
             setToast({ message: "Marking complete! Order moved to Cutting", type: "success" });
             loadData();
@@ -188,10 +202,10 @@ export default function MarkingCheckPage() {
         return { color: "text-gray-600", label: `${diff}d` };
     };
 
-    const getProgress = (tasks: MarkingTask[]) => {
+    const getProgress = (tasks: SubTask[]) => {
         const approved = tasks.filter(t => t.status === "approved").length;
         const completed = tasks.filter(t => t.status === "completed" || t.status === "approved").length;
-        return { approved, completed, total: tasks.length, allApproved: approved === tasks.length };
+        return { approved, completed, total: tasks.length, allApproved: approved === tasks.length && tasks.length > 0 };
     };
 
     return (
@@ -337,7 +351,7 @@ export default function MarkingCheckPage() {
                                                             <div className="mb-3">
                                                                 <select
                                                                     value={task.assignedStaffId || ""}
-                                                                    onChange={(e) => handleAssignTask(task.taskId, e.target.value)}
+                                                                    onChange={(e) => handleAssignTask(task.taskId, e.target.value, order.orderId)}
                                                                     disabled={actionLoading === task.taskId}
                                                                     className="w-full text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                                                                 >
@@ -354,7 +368,7 @@ export default function MarkingCheckPage() {
                                                             {canApprove && (
                                                                 <div className="flex gap-2">
                                                                     <button
-                                                                        onClick={() => handleApproveTask(task.taskId)}
+                                                                        onClick={() => handleApproveTask(order.orderId, task.taskId)}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50"
                                                                     >
@@ -362,7 +376,7 @@ export default function MarkingCheckPage() {
                                                                         Approve
                                                                     </button>
                                                                     <button
-                                                                        onClick={() => setRejectModal({ taskId: task.taskId, reason: "" })}
+                                                                        onClick={() => setRejectModal({ taskId: task.taskId, orderId: order.orderId, reason: "" })}
                                                                         disabled={actionLoading === task.taskId}
                                                                         className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 disabled:opacity-50"
                                                                     >

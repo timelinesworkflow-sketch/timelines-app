@@ -11,7 +11,7 @@ import {
     where,
     Timestamp,
 } from "firebase/firestore";
-import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, User, SubStageParentRole } from "@/types";
+import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, User, SubStageParentRole, Order } from "@/types";
 
 const TEMPLATES_COLLECTION = "markingTemplates";
 const MARKING_TASKS_COLLECTION = "markingTasks";
@@ -253,17 +253,20 @@ export async function saveTemplate(template: MarkingTemplate): Promise<void> {
  * Generate marking tasks for an order based on garment type
  * Auto-assigns from default staff if exactly 1 default exists for the sub-stage
  */
+/**
+ * Generate marking tasks map for an order (Embedded)
+ */
+import { MarkingTaskMap, SubTask } from "@/types";
+
 export async function generateMarkingTasksForOrder(
     orderId: string,
     garmentType: GarmentType
-): Promise<MarkingTask[]> {
+): Promise<MarkingTaskMap> {
     const template = await getTemplateForGarmentType(garmentType);
-    const tasks: MarkingTask[] = [];
+    const tasks: MarkingTaskMap = {};
 
     for (const templateTask of template.tasks) {
-        const taskRef = doc(collection(db, MARKING_TASKS_COLLECTION));
-
-        // Generate sub-stage ID from task name
+        // Generate consistent sub-stage ID (key for the map)
         const subStageId = generateSubStageId(templateTask.taskName);
 
         // Check for default staff based on sub-stage ID
@@ -276,127 +279,129 @@ export async function generateMarkingTasksForOrder(
             assignedStaffName = defaultStaff.name;
         }
 
-        const task: MarkingTask = {
-            taskId: taskRef.id,
-            orderId,
+        tasks[subStageId] = {
+            taskId: subStageId,
             taskName: templateTask.taskName,
             taskOrder: templateTask.taskOrder,
             isMandatory: templateTask.isMandatory,
             status: "not_started",
             assignedStaffId,
             assignedStaffName,
-            subStageId, // Store sub-stage ID for lookups
         };
-
-        await setDoc(taskRef, task);
-        tasks.push(task);
     }
 
     return tasks;
 }
 
-/**
- * Get marking tasks for an order
- */
-export async function getMarkingTasksForOrder(orderId: string): Promise<MarkingTask[]> {
-    const q = query(
-        collection(db, MARKING_TASKS_COLLECTION),
-        where("orderId", "==", orderId)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-        .map(doc => doc.data() as MarkingTask)
-        .sort((a, b) => a.taskOrder - b.taskOrder);
-}
+// NOTE: Getters are no longer needed as data is on the Order object
 
 /**
- * Get marking tasks for a staff member
+ * Assign a marking task to a staff member (Embedded)
  */
-export async function getMarkingTasksForStaff(staffId: string): Promise<MarkingTask[]> {
-    const q = query(
-        collection(db, MARKING_TASKS_COLLECTION),
-        where("assignedStaffId", "==", staffId)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs
-        .map(doc => doc.data() as MarkingTask)
-        .sort((a, b) => a.taskOrder - b.taskOrder);
-}
+import { assignItemToStaff } from "@/lib/assignments";
 
-/**
- * Update a marking task
- */
-export async function updateMarkingTask(taskId: string, updates: Partial<MarkingTask>): Promise<void> {
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), updates);
-}
-
-/**
- * Assign a marking task to a staff member
- */
 export async function assignMarkingTask(
     taskId: string,
+    orderId: string, // Needed for audit log & updating order doc
     staffId: string,
-    staffName: string
+    staffName: string,
+    assignedBy: {
+        staffId: string;
+        staffName: string;
+        role: "admin" | "supervisor";
+    }
 ): Promise<void> {
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
-        assignedStaffId: staffId,
-        assignedStaffName: staffName,
+    await assignItemToStaff({
+        orderId,
+        itemId: taskId,
+        targetType: "stage_task",
+        stage: "marking",
+        newStaffId: staffId,
+        newStaffName: staffName,
+        assignedByStaffId: assignedBy.staffId,
+        assignedByStaffName: assignedBy.staffName,
+        assignedByRole: assignedBy.role,
+    });
+}
+
+
+/**
+ * Start a marking task (Embedded)
+ */
+export async function startMarkingTask(orderId: string, taskId: string): Promise<void> {
+    const orderRef = doc(db, "orders", orderId);
+    await updateDoc(orderRef, {
+        [`markingTasks.${taskId}.status`]: "in_progress",
+        // [`markingTasks.${taskId}.startedAt`]: Timestamp.now(), // optional if we add to type
     });
 }
 
 /**
- * Start a marking task
+ * Complete a marking task (Embedded)
  */
-export async function startMarkingTask(taskId: string): Promise<void> {
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
-        status: "in_progress",
-        startedAt: Timestamp.now(),
-    });
-}
-
-/**
- * Complete a marking task
- */
-export async function completeMarkingTask(taskId: string, notes?: string): Promise<void> {
-    const updates: Partial<MarkingTask> = {
-        status: "completed",
-        completedAt: Timestamp.now(),
+export async function completeMarkingTask(orderId: string, taskId: string, notes?: string): Promise<void> {
+    const updates: any = {
+        [`markingTasks.${taskId}.status`]: "completed",
+        [`markingTasks.${taskId}.completedAt`]: Timestamp.now(),
     };
-    if (notes) updates.notes = notes;
+    if (notes) updates[`markingTasks.${taskId}.notes`] = notes;
 
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), updates);
+    await updateDoc(doc(db, "orders", orderId), updates);
 }
 
 /**
- * Approve a marking task (Checker only)
+ * Approve a marking task (Embedded)
  */
 export async function approveMarkingTask(
+    orderId: string,
     taskId: string,
     approverStaffId: string,
     approverName: string
 ): Promise<void> {
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
-        status: "approved",
-        approvedBy: approverStaffId,
-        approvedByName: approverName,
-        approvedAt: Timestamp.now(),
+    await updateDoc(doc(db, "orders", orderId), {
+        [`markingTasks.${taskId}.status`]: "approved",
+        [`markingTasks.${taskId}.approvedBy`]: approverStaffId,
+        [`markingTasks.${taskId}.approvedByName`]: approverName,
+        [`markingTasks.${taskId}.approvedAt`]: Timestamp.now(),
     });
 }
 
 /**
- * Reject a marking task (mark as needs rework)
+ * Reject a marking task (Embedded)
  */
-export async function rejectMarkingTask(taskId: string, notes: string): Promise<void> {
-    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
-        status: "needs_rework",
-        notes,
+export async function rejectMarkingTask(orderId: string, taskId: string, notes: string): Promise<void> {
+    await updateDoc(doc(db, "orders", orderId), {
+        [`markingTasks.${taskId}.status`]: "needs_rework",
+        [`markingTasks.${taskId}.notes`]: notes,
     });
 }
 
 /**
- * Check if all marking tasks for an order are approved
+ * Ensure marking tasks exist for an order (Lazy Migration)
+ * Returns the marking tasks map, generating and saving it if missing.
  */
-export async function areAllMarkingTasksApproved(orderId: string): Promise<boolean> {
-    const tasks = await getMarkingTasksForOrder(orderId);
+export async function ensureMarkingTasks(order: Order): Promise<MarkingTaskMap> {
+    if (order.markingTasks && Object.keys(order.markingTasks).length > 0) {
+        return order.markingTasks;
+    }
+
+    // Generate tasks
+    const tasks = await generateMarkingTasksForOrder(order.orderId, order.garmentType);
+
+    // Persist to DB
+    const orderRef = doc(db, "orders", order.orderId);
+    await updateDoc(orderRef, {
+        markingTasks: tasks
+    });
+
+    return tasks;
+}
+
+/**
+ * Check if all marking tasks for an order are approved (Embedded)
+ */
+export function areAllMarkingTasksApproved(markingTasks?: MarkingTaskMap): boolean {
+    if (!markingTasks) return false;
+    const tasks = Object.values(markingTasks);
     return tasks.length > 0 && tasks.every(task => task.status === "approved");
 }

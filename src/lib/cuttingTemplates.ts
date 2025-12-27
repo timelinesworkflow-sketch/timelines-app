@@ -317,14 +317,32 @@ export async function updateCuttingTask(taskId: string, updates: Partial<Cutting
 /**
  * Assign a cutting task to a staff member
  */
+import { assignItemToStaff } from "@/lib/assignments";
+
+/**
+ * Assign a cutting task to a staff member
+ */
 export async function assignCuttingTask(
     taskId: string,
+    orderId: string, // Needed for audit log
     staffId: string,
-    staffName: string
+    staffName: string,
+    assignedBy: {
+        staffId: string;
+        staffName: string;
+        role: "admin" | "supervisor";
+    }
 ): Promise<void> {
-    await updateDoc(doc(db, CUTTING_TASKS_COLLECTION, taskId), {
-        assignedStaffId: staffId,
-        assignedStaffName: staffName,
+    await assignItemToStaff({
+        orderId,
+        itemId: taskId,
+        targetType: "stage_task",
+        stage: "cutting",
+        newStaffId: staffId,
+        newStaffName: staffName,
+        assignedByStaffId: assignedBy.staffId,
+        assignedByStaffName: assignedBy.staffName,
+        assignedByRole: assignedBy.role,
     });
 }
 
