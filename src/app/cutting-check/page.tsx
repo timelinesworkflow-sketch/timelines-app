@@ -15,6 +15,7 @@ import {
     assignCuttingTask,
     areAllCuttingTasksApproved,
 } from "@/lib/cuttingTemplates";
+import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
 import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -146,24 +147,57 @@ export default function CuttingCheckPage() {
     };
 
     const handleCompleteCutting = async (orderId: string) => {
+        if (!userData) return;
+
         setActionLoading(orderId);
         try {
+            // Verify ALL tasks are approved
             const allApproved = await areAllCuttingTasksApproved(orderId);
             if (!allApproved) {
-                setToast({ message: "All tasks must be approved first", type: "error" });
+                setToast({ message: "All mandatory tasks must be approved first", type: "error" });
                 return;
             }
 
-            // Move to next stage (stitching)
+            // Get order to determine next stage
+            const orderData = ordersWithTasks.find(o => o.order.orderId === orderId);
+            if (!orderData) {
+                throw new Error("Order not found");
+            }
+
+            // Determine next stage dynamically
+            const nextStage = getNextStage("cutting", orderData.order.activeStages);
+
+            // Update order to next stage
             await updateDoc(doc(db, "orders", orderId), {
-                currentStage: "stitching",
+                currentStage: nextStage || "completed",
+                status: nextStage ? "in_progress" : "completed",
             });
 
-            setToast({ message: "Cutting complete! Order moved to Stitching", type: "success" });
+            // Add timeline entry for cutting completion
+            await addTimelineEntry(orderId, {
+                staffId: userData.staffId,
+                role: userData.role,
+                stage: "cutting",
+                action: "completed",
+            });
+
+            // Log staff work
+            await logStaffWork({
+                staffId: userData.staffId,
+                firebaseUid: userData.email,
+                email: userData.email,
+                role: userData.role,
+                orderId: orderId,
+                stage: "cutting",
+                action: "checked_ok",
+            });
+
+            setToast({ message: `Cutting complete! Order moved to ${nextStage || "completed"}`, type: "success" });
             loadData();
         } catch (error) {
             console.error("Failed to complete cutting:", error);
-            setToast({ message: "Failed to complete cutting", type: "error" });
+            const errorMessage = error instanceof Error ? error.message : "Failed to complete cutting";
+            setToast({ message: errorMessage, type: "error" });
         } finally {
             setActionLoading(null);
         }

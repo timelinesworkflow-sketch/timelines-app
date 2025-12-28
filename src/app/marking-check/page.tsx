@@ -195,6 +195,14 @@ export default function MarkingCheckPage() {
                 const existingCuttingTasks = await getCuttingTasksForOrder(orderId);
                 if (!existingCuttingTasks || existingCuttingTasks.length === 0) {
                     await generateCuttingTasksForOrder(orderId, order.garmentType);
+                    
+                    // Add timeline entry for cutting stage started
+                    await addTimelineEntry(orderId, {
+                        staffId: userData.staffId,
+                        role: userData.role,
+                        stage: "cutting",
+                        action: "started",
+                    });
                 }
             }
 
