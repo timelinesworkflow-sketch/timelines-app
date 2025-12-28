@@ -253,8 +253,8 @@ export default function MaterialsPage() {
 
             // Generate marking tasks if moving to marking stage
             if (nextStage === "marking") {
-                const markingTasks = await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
-                updates.markingTasks = markingTasks;
+                // Tasks are created in the markingTasks collection
+                await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
             }
 
             // Update order

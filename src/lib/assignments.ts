@@ -66,26 +66,17 @@ export async function assignItemToStaff(data: {
     } else if (targetType === "stage_task") {
         if (!stage) throw new Error("Stage is required for stage task assignment");
 
-        if (stage === "marking") {
-            // New Embedded Logic for Marking
-            // Update order document directly: markingTasks.{subTaskId}.assignedStaffId
-            const orderRef = doc(db, "orders", orderId);
-            await updateDoc(orderRef, {
-                [`markingTasks.${itemId}.assignedStaffId`]: newStaffId,
-                [`markingTasks.${itemId}.assignedStaffName`]: newStaffName,
-            });
-        } else {
-            // Legacy/Collection Logic for Cutting (and others)
-            let collectionName = "";
-            if (stage === "cutting") collectionName = "cuttingTasks";
-            else throw new Error(`Unsupported stage for task assignment: ${stage}`);
+        // Collection-based update for stage tasks
+        let collectionName = "";
+        if (stage === "marking") collectionName = "markingTasks";
+        else if (stage === "cutting") collectionName = "cuttingTasks";
+        else throw new Error(`Unsupported stage for task assignment: ${stage}`);
 
-            const taskRef = doc(db, collectionName, itemId);
-            await updateDoc(taskRef, {
-                assignedStaffId: newStaffId,
-                assignedStaffName: newStaffName,
-            });
-        }
+        const taskRef = doc(db, collectionName, itemId);
+        await updateDoc(taskRef, {
+            assignedStaffId: newStaffId,
+            assignedStaffName: newStaffName,
+        });
     }
 
     // 2. Create Audit Log Entry

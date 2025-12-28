@@ -246,28 +246,26 @@ export async function saveTemplate(template: MarkingTemplate): Promise<void> {
 }
 
 // ============================================
-// MARKING TASK OPERATIONS
+// MARKING TASK OPERATIONS (Collection-Based)
 // ============================================
 
 /**
  * Generate marking tasks for an order based on garment type
+ * Creates documents in the markingTasks collection
  * Auto-assigns from default staff if exactly 1 default exists for the sub-stage
  */
-/**
- * Generate marking tasks map for an order (Embedded)
- */
-import { MarkingTaskMap, SubTask } from "@/types";
-
 export async function generateMarkingTasksForOrder(
     orderId: string,
     garmentType: GarmentType
-): Promise<MarkingTaskMap> {
+): Promise<MarkingTask[]> {
     const template = await getTemplateForGarmentType(garmentType);
-    const tasks: MarkingTaskMap = {};
+    const tasks: MarkingTask[] = [];
+    const now = Timestamp.now();
 
     for (const templateTask of template.tasks) {
-        // Generate consistent sub-stage ID (key for the map)
+        // Generate consistent sub-stage ID
         const subStageId = generateSubStageId(templateTask.taskName);
+        const taskId = `${orderId}_${subStageId}`;
 
         // Check for default staff based on sub-stage ID
         let assignedStaffId: string | undefined;
@@ -279,30 +277,72 @@ export async function generateMarkingTasksForOrder(
             assignedStaffName = defaultStaff.name;
         }
 
-        tasks[subStageId] = {
-            taskId: subStageId,
+        const task: MarkingTask = {
+            taskId,
+            orderId,
             taskName: templateTask.taskName,
             taskOrder: templateTask.taskOrder,
             isMandatory: templateTask.isMandatory,
             status: "not_started",
             assignedStaffId,
             assignedStaffName,
+            createdAt: now,
         };
+
+        // Save to collection
+        await setDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), task);
+        tasks.push(task);
     }
 
     return tasks;
 }
 
-// NOTE: Getters are no longer needed as data is on the Order object
+/**
+ * Get all marking tasks for a specific order
+ */
+export async function getMarkingTasksForOrder(orderId: string): Promise<MarkingTask[]> {
+    const q = query(
+        collection(db, MARKING_TASKS_COLLECTION),
+        where("orderId", "==", orderId)
+    );
+    const snapshot = await getDocs(q);
+    const tasks = snapshot.docs.map(doc => doc.data() as MarkingTask);
+    return tasks.sort((a, b) => a.taskOrder - b.taskOrder);
+}
 
 /**
- * Assign a marking task to a staff member (Embedded)
+ * Get all marking tasks assigned to a specific staff member
+ */
+export async function getMarkingTasksForStaff(staffId: string): Promise<MarkingTask[]> {
+    const q = query(
+        collection(db, MARKING_TASKS_COLLECTION),
+        where("assignedStaffId", "==", staffId),
+        where("status", "in", ["not_started", "in_progress", "needs_rework"])
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as MarkingTask);
+}
+
+/**
+ * Get all pending marking tasks (for supervisor/admin view)
+ */
+export async function getAllPendingMarkingTasks(): Promise<MarkingTask[]> {
+    const q = query(
+        collection(db, MARKING_TASKS_COLLECTION),
+        where("status", "in", ["not_started", "in_progress", "completed", "needs_rework"])
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as MarkingTask);
+}
+
+/**
+ * Assign a marking task to a staff member
  */
 import { assignItemToStaff } from "@/lib/assignments";
 
 export async function assignMarkingTask(
     taskId: string,
-    orderId: string, // Needed for audit log & updating order doc
+    orderId: string,
     staffId: string,
     staffName: string,
     assignedBy: {
@@ -324,84 +364,71 @@ export async function assignMarkingTask(
     });
 }
 
-
 /**
- * Start a marking task (Embedded)
+ * Start a marking task
  */
-export async function startMarkingTask(orderId: string, taskId: string): Promise<void> {
-    const orderRef = doc(db, "orders", orderId);
-    await updateDoc(orderRef, {
-        [`markingTasks.${taskId}.status`]: "in_progress",
-        // [`markingTasks.${taskId}.startedAt`]: Timestamp.now(), // optional if we add to type
+export async function startMarkingTask(taskId: string): Promise<void> {
+    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
+        status: "in_progress",
+        startedAt: Timestamp.now(),
     });
 }
 
 /**
- * Complete a marking task (Embedded)
+ * Complete a marking task
  */
-export async function completeMarkingTask(orderId: string, taskId: string, notes?: string): Promise<void> {
-    const updates: any = {
-        [`markingTasks.${taskId}.status`]: "completed",
-        [`markingTasks.${taskId}.completedAt`]: Timestamp.now(),
+export async function completeMarkingTask(taskId: string, notes?: string): Promise<void> {
+    const updates: Record<string, unknown> = {
+        status: "completed",
+        completedAt: Timestamp.now(),
     };
-    if (notes) updates[`markingTasks.${taskId}.notes`] = notes;
+    if (notes) updates.notes = notes;
 
-    await updateDoc(doc(db, "orders", orderId), updates);
+    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), updates);
 }
 
 /**
- * Approve a marking task (Embedded)
+ * Approve a marking task
  */
 export async function approveMarkingTask(
-    orderId: string,
     taskId: string,
     approverStaffId: string,
     approverName: string
 ): Promise<void> {
-    await updateDoc(doc(db, "orders", orderId), {
-        [`markingTasks.${taskId}.status`]: "approved",
-        [`markingTasks.${taskId}.approvedBy`]: approverStaffId,
-        [`markingTasks.${taskId}.approvedByName`]: approverName,
-        [`markingTasks.${taskId}.approvedAt`]: Timestamp.now(),
+    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
+        status: "approved",
+        approvedBy: approverStaffId,
+        approvedByName: approverName,
+        approvedAt: Timestamp.now(),
     });
 }
 
 /**
- * Reject a marking task (Embedded)
+ * Reject a marking task (send back for rework)
  */
-export async function rejectMarkingTask(orderId: string, taskId: string, notes: string): Promise<void> {
-    await updateDoc(doc(db, "orders", orderId), {
-        [`markingTasks.${taskId}.status`]: "needs_rework",
-        [`markingTasks.${taskId}.notes`]: notes,
+export async function rejectMarkingTask(taskId: string, notes: string): Promise<void> {
+    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), {
+        status: "needs_rework",
+        notes,
     });
 }
 
 /**
- * Ensure marking tasks exist for an order (Lazy Migration)
- * Returns the marking tasks map, generating and saving it if missing.
+ * Check if all marking tasks for an order are approved
  */
-export async function ensureMarkingTasks(order: Order): Promise<MarkingTaskMap> {
-    if (order.markingTasks && Object.keys(order.markingTasks).length > 0) {
-        return order.markingTasks;
-    }
-
-    // Generate tasks
-    const tasks = await generateMarkingTasksForOrder(order.orderId, order.garmentType);
-
-    // Persist to DB
-    const orderRef = doc(db, "orders", order.orderId);
-    await updateDoc(orderRef, {
-        markingTasks: tasks
-    });
-
-    return tasks;
+export async function areAllMarkingTasksApproved(orderId: string): Promise<boolean> {
+    const tasks = await getMarkingTasksForOrder(orderId);
+    if (tasks.length === 0) return false;
+    return tasks.every(task => task.status === "approved");
 }
 
 /**
- * Check if all marking tasks for an order are approved (Embedded)
+ * Update a marking task directly (for assignment updates)
  */
-export function areAllMarkingTasksApproved(markingTasks?: MarkingTaskMap): boolean {
-    if (!markingTasks) return false;
-    const tasks = Object.values(markingTasks);
-    return tasks.length > 0 && tasks.every(task => task.status === "approved");
+export async function updateMarkingTask(
+    taskId: string,
+    updates: Partial<MarkingTask>
+): Promise<void> {
+    await updateDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), updates);
 }
+

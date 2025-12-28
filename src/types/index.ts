@@ -285,6 +285,7 @@ export interface MarkingTask {
     status: MarkingTaskStatus;
     assignedStaffId?: string;
     assignedStaffName?: string;
+    createdAt?: Timestamp;
     startedAt?: Timestamp;
     completedAt?: Timestamp;
     approvedBy?: string;
