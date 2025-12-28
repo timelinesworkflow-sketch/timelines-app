@@ -14,7 +14,8 @@ import {
     assignMarkingTask,
     areAllMarkingTasksApproved,
 } from "@/lib/markingTemplates";
-import { generateCuttingTasksForOrder } from "@/lib/cuttingTemplates";
+import { generateCuttingTasksForOrder, getCuttingTasksForOrder } from "@/lib/cuttingTemplates";
+import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
 import { CheckSquare, Check, X, RefreshCw, Calendar, AlertCircle, ChevronRight, Package } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -168,23 +169,60 @@ export default function MarkingCheckPage() {
     };
 
     const handleCompleteMarking = async (orderId: string) => {
-        try {
-            // Move to next stage (cutting)
-            await updateDoc(doc(db, "orders", orderId), {
-                currentStage: "cutting",
-            });
+        if (!userData) return;
 
-            // Generate cutting tasks
+        try {
+            // Get current order to determine next stage
             const group = taskGroups.find(g => g.orderId === orderId);
-            if (group?.order) {
-                await generateCuttingTasksForOrder(orderId, group.order.garmentType);
+            const order = group?.order;
+
+            if (!order) {
+                throw new Error("Order not found");
             }
 
-            setToast({ message: "Marking complete! Order moved to Cutting", type: "success" });
+            // Determine next stage using activeStages
+            const nextStage = getNextStage("marking", order.activeStages);
+
+            // Update order document with next stage
+            await updateDoc(doc(db, "orders", orderId), {
+                currentStage: nextStage || "completed",
+                status: nextStage ? "in_progress" : "completed",
+            });
+
+            // Generate cutting tasks if next stage is cutting
+            if (nextStage === "cutting") {
+                // Safety: check if cutting tasks already exist
+                const existingCuttingTasks = await getCuttingTasksForOrder(orderId);
+                if (!existingCuttingTasks || existingCuttingTasks.length === 0) {
+                    await generateCuttingTasksForOrder(orderId, order.garmentType);
+                }
+            }
+
+            // Create timeline entry
+            await addTimelineEntry(orderId, {
+                staffId: userData.staffId,
+                role: userData.role,
+                stage: "marking",
+                action: "completed",
+            });
+
+            // Log staff work
+            await logStaffWork({
+                staffId: userData.staffId,
+                firebaseUid: userData.email,
+                email: userData.email,
+                role: userData.role,
+                orderId: orderId,
+                stage: "marking",
+                action: "checked_ok",
+            });
+
+            setToast({ message: `Marking complete! Order moved to ${nextStage || "completed"}`, type: "success" });
             loadData();
         } catch (error) {
             console.error("Failed to complete marking:", error);
-            setToast({ message: "Failed to complete marking", type: "error" });
+            const errorMessage = error instanceof Error ? error.message : "Failed to complete marking";
+            setToast({ message: errorMessage, type: "error" });
         }
     };
 
@@ -313,8 +351,8 @@ export default function MarkingCheckPage() {
                                                         onClick={() => handleCompleteMarking(orderId)}
                                                         disabled={!progress.allApproved || actionLoading === orderId}
                                                         className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${progress.allApproved
-                                                                ? "bg-green-600 text-white hover:bg-green-700"
-                                                                : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                                                            ? "bg-green-600 text-white hover:bg-green-700"
+                                                            : "bg-slate-700 text-slate-500 cursor-not-allowed"
                                                             }`}
                                                     >
                                                         {actionLoading === orderId ? "..." : "Complete"}
@@ -335,10 +373,10 @@ export default function MarkingCheckPage() {
                                                         <div
                                                             key={task.taskId}
                                                             className={`border rounded-xl p-3 ${task.status === "approved"
-                                                                    ? "border-emerald-700 bg-emerald-900/20"
-                                                                    : task.status === "needs_rework"
-                                                                        ? "border-red-700 bg-red-900/20"
-                                                                        : "border-slate-600 bg-slate-750"
+                                                                ? "border-emerald-700 bg-emerald-900/20"
+                                                                : task.status === "needs_rework"
+                                                                    ? "border-red-700 bg-red-900/20"
+                                                                    : "border-slate-600 bg-slate-750"
                                                                 }`}
                                                         >
                                                             {/* Task Header */}
