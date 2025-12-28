@@ -65,7 +65,7 @@ export default function MarkingCheckPage() {
             for (const order of orders) {
                 // Get tasks from embedded map (lazily migrate if needed)
                 const tasksMap = await ensureMarkingTasks(order);
-                let tasks: SubTask[] = Object.values(tasksMap);
+                const tasks: SubTask[] = Object.values(tasksMap);
 
                 // Sort by taskOrder
                 tasks.sort((a, b) => a.taskOrder - b.taskOrder);
