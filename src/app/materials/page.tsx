@@ -16,7 +16,7 @@ import {
     InventorySummary
 } from "@/lib/inventory";
 import { createPurchaseRequest, getCompletedOrderPurchases, addPurchasedMaterialToInventory } from "@/lib/purchases";
-import { generateMarkingTasksForOrder } from "@/lib/markingTemplates";
+import { generateMarkingTasksForOrder, getMarkingTasksForOrder } from "@/lib/markingTemplates";
 import { PurchaseRequest } from "@/types";
 import { Timestamp } from "firebase/firestore";
 import {
@@ -253,8 +253,11 @@ export default function MaterialsPage() {
 
             // Generate marking tasks if moving to marking stage
             if (nextStage === "marking") {
-                // Tasks are created in the markingTasks collection
-                await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+                // SAFETY: Ensure marking tasks exist before transitioning
+                const existingTasks = await getMarkingTasksForOrder(currentOrder.orderId);
+                if (!existingTasks || existingTasks.length === 0) {
+                    await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+                }
             }
 
             // Update order
@@ -282,9 +285,10 @@ export default function MaterialsPage() {
             // Reload data
             await loadOrders();
             await loadInventory();
-        } catch (error) {
+        } catch (error: unknown) {
             console.error("Failed to confirm usage:", error);
-            setToast({ message: "Failed to confirm usage", type: "error" });
+            const errorMessage = error instanceof Error ? error.message : "Failed to confirm usage";
+            setToast({ message: errorMessage, type: "error" });
         } finally {
             setActionLoading(false);
         }
