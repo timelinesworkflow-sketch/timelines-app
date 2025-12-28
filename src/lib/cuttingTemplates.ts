@@ -17,6 +17,22 @@ const TEMPLATES_COLLECTION = "cuttingTemplates";
 const CUTTING_TASKS_COLLECTION = "cuttingTasks";
 
 // ============================================
+// UTILITY: Remove undefined fields from objects
+// Firestore does NOT accept undefined values
+// ============================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripUndefined(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+        if (obj[key] !== undefined) {
+            result[key] = obj[key];
+        }
+    }
+    return result;
+}
+
+// ============================================
 // SUB-STAGE ID GENERATION
 // ============================================
 
@@ -242,6 +258,11 @@ export async function generateCuttingTasksForOrder(
     garmentType: GarmentType
 ): Promise<CuttingTask[]> {
     const template = await getCuttingTemplateForGarmentType(garmentType);
+
+    if (!template.tasks || template.tasks.length === 0) {
+        throw new Error(`No cutting tasks defined for garment type: ${garmentType}`);
+    }
+
     const tasks: CuttingTask[] = [];
 
     for (const templateTask of template.tasks) {
@@ -251,14 +272,11 @@ export async function generateCuttingTasksForOrder(
         const subStageId = generateSubStageId(templateTask.taskName);
 
         // Check for default staff based on sub-stage ID
-        let assignedStaffId: string | undefined;
-        let assignedStaffName: string | undefined;
-
         const defaultStaff = await getDefaultStaffForCuttingSubStage(subStageId);
-        if (defaultStaff) {
-            assignedStaffId = defaultStaff.staffId;
-            assignedStaffName = defaultStaff.name;
-        }
+
+        // Use null for optional fields, never undefined (Firestore rejects undefined)
+        const assignedStaffId = defaultStaff?.staffId ?? null;
+        const assignedStaffName = defaultStaff?.name ?? null;
 
         const task: CuttingTask = {
             taskId: taskRef.id,
@@ -267,12 +285,14 @@ export async function generateCuttingTasksForOrder(
             taskOrder: templateTask.taskOrder,
             isMandatory: templateTask.isMandatory,
             status: "not_started",
-            assignedStaffId,
-            assignedStaffName,
             subStageId,
+            assignedStaffId: assignedStaffId ?? undefined,
+            assignedStaffName: assignedStaffName ?? undefined,
         };
 
-        await setDoc(taskRef, task);
+        // Strip undefined fields before Firestore write
+        const cleanTask = stripUndefined(task);
+        await setDoc(taskRef, cleanTask);
         tasks.push(task);
     }
 

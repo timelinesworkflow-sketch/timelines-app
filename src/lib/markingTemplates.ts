@@ -17,6 +17,22 @@ const TEMPLATES_COLLECTION = "markingTemplates";
 const MARKING_TASKS_COLLECTION = "markingTasks";
 
 // ============================================
+// UTILITY: Remove undefined fields from objects
+// Firestore does NOT accept undefined values
+// ============================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripUndefined(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+        if (obj[key] !== undefined) {
+            result[key] = obj[key];
+        }
+    }
+    return result;
+}
+
+// ============================================
 // SUB-STAGE ID GENERATION
 // ============================================
 
@@ -259,6 +275,11 @@ export async function generateMarkingTasksForOrder(
     garmentType: GarmentType
 ): Promise<MarkingTask[]> {
     const template = await getTemplateForGarmentType(garmentType);
+
+    if (!template.tasks || template.tasks.length === 0) {
+        throw new Error(`No marking tasks defined for garment type: ${garmentType}`);
+    }
+
     const tasks: MarkingTask[] = [];
     const now = Timestamp.now();
 
@@ -268,14 +289,11 @@ export async function generateMarkingTasksForOrder(
         const taskId = `${orderId}_${subStageId}`;
 
         // Check for default staff based on sub-stage ID
-        let assignedStaffId: string | undefined;
-        let assignedStaffName: string | undefined;
-
         const defaultStaff = await getDefaultStaffForSubStage(subStageId);
-        if (defaultStaff) {
-            assignedStaffId = defaultStaff.staffId;
-            assignedStaffName = defaultStaff.name;
-        }
+
+        // Use null fallbacks instead of undefined (Firestore rejects undefined)
+        const assignedStaffId = defaultStaff?.staffId ?? undefined;
+        const assignedStaffName = defaultStaff?.name ?? undefined;
 
         const task: MarkingTask = {
             taskId,
@@ -289,8 +307,9 @@ export async function generateMarkingTasksForOrder(
             createdAt: now,
         };
 
-        // Save to collection
-        await setDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), task);
+        // Strip undefined fields before Firestore write
+        const cleanTask = stripUndefined(task);
+        await setDoc(doc(db, MARKING_TASKS_COLLECTION, taskId), cleanTask);
         tasks.push(task);
     }
 
