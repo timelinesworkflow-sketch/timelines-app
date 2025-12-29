@@ -57,11 +57,17 @@ export default function CuttingPage() {
             const ordersRef = collection(db, "orders");
             const q = query(
                 ordersRef,
-                where("currentStage", "==", "cutting"),
-                orderBy("createdAt", "desc")
+                where("currentStage", "==", "cutting")
             );
             const snapshot = await getDocs(q);
-            const orders = snapshot.docs.map((doc) => doc.data() as Order);
+            // Sort client-side by createdAt descending
+            const orders = snapshot.docs
+                .map((doc) => doc.data() as Order)
+                .sort((a, b) => {
+                    const aDate = a.createdAt?.toDate?.() || new Date(0);
+                    const bDate = b.createdAt?.toDate?.() || new Date(0);
+                    return bDate.getTime() - aDate.getTime();
+                });
 
             // Load tasks for each order
             const ordersWithTasksData: OrderWithTasks[] = [];

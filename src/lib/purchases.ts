@@ -68,17 +68,24 @@ export async function createPurchaseRequest(data: {
  * Get all pending purchases (sorted by due date)
  */
 export async function getPendingPurchases(): Promise<PurchaseRequest[]> {
+    // Query without orderBy to avoid composite index requirement
     const q = query(
         collection(db, PURCHASES_COLLECTION),
-        where("status", "in", ["pending", "in_progress"]),
-        orderBy("dueDate", "asc")
+        where("status", "in", ["pending", "in_progress"])
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    const purchases = snapshot.docs.map(doc => ({
         ...doc.data(),
         purchaseId: doc.id,
     } as PurchaseRequest));
+
+    // Sort client-side by dueDate
+    return purchases.sort((a, b) => {
+        const aDate = a.dueDate?.toDate?.() || new Date(0);
+        const bDate = b.dueDate?.toDate?.() || new Date(0);
+        return aDate.getTime() - bDate.getTime();
+    });
 }
 
 /**
