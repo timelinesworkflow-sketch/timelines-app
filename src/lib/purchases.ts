@@ -184,19 +184,26 @@ export async function cancelPurchase(purchaseId: string): Promise<void> {
  * Get completed purchases for a specific order (for Materials stage)
  */
 export async function getCompletedOrderPurchases(orderId: string): Promise<PurchaseRequest[]> {
+    // Use simpler query to avoid composite index requirement
     const q = query(
         collection(db, PURCHASES_COLLECTION),
-        where("orderId", "==", orderId),
-        where("purchaseType", "==", "order"),
-        where("status", "==", "completed"),
-        orderBy("completedAt", "desc")
+        where("orderId", "==", orderId)
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-        ...doc.data(),
-        purchaseId: doc.id,
-    } as PurchaseRequest));
+    const purchases = snapshot.docs
+        .map(doc => ({
+            ...doc.data(),
+            purchaseId: doc.id,
+        } as PurchaseRequest))
+        .filter(p => p.purchaseType === "order" && p.status === "completed");
+
+    // Sort by completedAt descending
+    return purchases.sort((a, b) => {
+        const aDate = a.completedAt?.toDate?.() || new Date(0);
+        const bDate = b.completedAt?.toDate?.() || new Date(0);
+        return bDate.getTime() - aDate.getTime();
+    });
 }
 
 /**

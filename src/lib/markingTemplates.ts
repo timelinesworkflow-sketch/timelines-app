@@ -12,6 +12,7 @@ import {
     Timestamp,
 } from "firebase/firestore";
 import { GarmentType, MarkingTemplate, MarkingTemplateTask, MarkingTask, User, SubStageParentRole, Order } from "@/types";
+import { getAllActiveStitchingSubStages } from "@/lib/stitchingTemplates";
 
 const TEMPLATES_COLLECTION = "markingTemplates";
 const MARKING_TASKS_COLLECTION = "markingTasks";
@@ -108,9 +109,9 @@ export async function getAllActiveSubStages(
         return getAllActiveCuttingSubStages();
     }
 
-    // For stitching, we'll add later when implemented
+    // For stitching, delegate to stitching templates
     if (stageType === "stitching") {
-        return []; // TODO: implement stitching templates
+        return getAllActiveStitchingSubStages();
     }
 
     // For marking, use marking templates
