@@ -16,6 +16,7 @@ import {
     areAllCuttingTasksApproved,
 } from "@/lib/cuttingTemplates";
 import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
+import { generateStitchingTasksForOrder, getStitchingTasksForOrder } from "@/lib/stitchingTemplates";
 import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
 import Toast from "@/components/Toast";
 
@@ -178,6 +179,23 @@ export default function CuttingCheckPage() {
                 currentStage: nextStage || "completed",
                 status: nextStage ? "in_progress" : "completed",
             });
+
+            // Generate stitching tasks if next stage is stitching
+            if (nextStage === "stitching") {
+                // Safety: check if stitching tasks already exist
+                const existingStitchingTasks = await getStitchingTasksForOrder(orderId);
+                if (!existingStitchingTasks || existingStitchingTasks.length === 0) {
+                    await generateStitchingTasksForOrder(orderId, orderData.order.garmentType);
+
+                    // Add timeline entry for stitching stage started
+                    await addTimelineEntry(orderId, {
+                        staffId: userData.staffId,
+                        role: userData.role,
+                        stage: "stitching",
+                        action: "started",
+                    });
+                }
+            }
 
             // Add timeline entry for cutting completion
             await addTimelineEntry(orderId, {

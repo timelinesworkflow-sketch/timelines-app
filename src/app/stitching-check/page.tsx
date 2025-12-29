@@ -1,32 +1,486 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import StagePageContent from "@/components/StagePageContent";
+import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Order, StitchingTask, User } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+    getStitchingTasksForOrder,
+    generateStitchingTasksForOrder,
+    approveStitchingTask,
+    rejectStitchingTask,
+    assignStitchingTask,
+    areAllStitchingTasksApproved,
+} from "@/lib/stitchingTemplates";
+import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
+import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
+import Toast from "@/components/Toast";
+
+interface OrderWithTasks {
+    order: Order;
+    tasks: StitchingTask[];
+}
 
 export default function StitchingCheckPage() {
+    const { userData } = useAuth();
+    const [ordersWithTasks, setOrdersWithTasks] = useState<OrderWithTasks[]>([]);
+    const [staffList, setStaffList] = useState<{ staffId: string; name: string }[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+    const [rejectModal, setRejectModal] = useState<{ taskId: string; reason: string } | null>(null);
+
+    useEffect(() => {
+        loadData();
+    }, [userData]);
+
+    const loadData = async () => {
+        if (!userData) return;
+
+        setLoading(true);
+        try {
+            // Load staff list
+            const usersSnapshot = await getDocs(collection(db, "users"));
+            const staff = usersSnapshot.docs
+                .map((doc) => doc.data() as User)
+                .filter((u) => u.isActive && (u.role === "stitching" || u.role === "stitching_checker"))
+                .map((u) => ({ staffId: u.staffId, name: u.name }));
+            setStaffList(staff);
+
+            // Load ALL orders in stitching stage
+            const ordersRef = collection(db, "orders");
+            const q = query(
+                ordersRef,
+                where("currentStage", "==", "stitching")
+            );
+            const snapshot = await getDocs(q);
+            const orders = snapshot.docs
+                .map((doc) => doc.data() as Order)
+                .sort((a, b) => {
+                    const aDate = a.createdAt?.toDate?.() || new Date(0);
+                    const bDate = b.createdAt?.toDate?.() || new Date(0);
+                    return bDate.getTime() - aDate.getTime();
+                });
+
+            // Load tasks for each order
+            const ordersWithTasksData: OrderWithTasks[] = [];
+
+            for (const order of orders) {
+                let tasks = await getStitchingTasksForOrder(order.orderId);
+
+                // Generate tasks if none exist
+                if (tasks.length === 0) {
+                    tasks = await generateStitchingTasksForOrder(order.orderId, order.garmentType);
+                }
+
+                ordersWithTasksData.push({ order, tasks });
+            }
+
+            setOrdersWithTasks(ordersWithTasksData);
+        } catch (error) {
+            console.error("Failed to load data:", error);
+            setToast({ message: "Failed to load tasks", type: "error" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleApproveTask = async (taskId: string, orderId: string) => {
+        if (!userData) return;
+
+        setActionLoading(taskId);
+        try {
+            await approveStitchingTask(taskId, userData.staffId, userData.name);
+            setToast({ message: "Task approved!", type: "success" });
+
+            // Check if all tasks are approved and complete stage
+            const allApproved = await areAllStitchingTasksApproved(orderId);
+            if (allApproved) {
+                await handleCompleteStitching(orderId);
+            } else {
+                loadData();
+            }
+        } catch (error) {
+            console.error("Failed to approve task:", error);
+            setToast({ message: "Failed to approve task", type: "error" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleRejectTask = async (taskId: string, reason: string) => {
+        setActionLoading(taskId);
+        try {
+            await rejectStitchingTask(taskId, reason);
+            setToast({ message: "Task sent for rework", type: "info" });
+            setRejectModal(null);
+            loadData();
+        } catch (error) {
+            console.error("Failed to reject task:", error);
+            setToast({ message: "Failed to reject task", type: "error" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleAssignTask = async (taskId: string, staffId: string, orderId: string) => {
+        const staff = staffList.find(s => s.staffId === staffId);
+        if (!staff || !userData) return;
+
+        setActionLoading(taskId);
+        try {
+            await assignStitchingTask(
+                taskId,
+                orderId,
+                staffId,
+                staff.name,
+                {
+                    staffId: userData.staffId,
+                    staffName: userData.name,
+                    role: userData.role as "admin" | "supervisor"
+                }
+            );
+            setToast({ message: `Assigned to ${staff.name}`, type: "success" });
+            loadData();
+        } catch (error) {
+            console.error("Failed to assign task:", error);
+            setToast({ message: "Failed to assign task", type: "error" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleCompleteStitching = async (orderId: string) => {
+        if (!userData) return;
+
+        setActionLoading(orderId);
+        try {
+            // Verify ALL tasks are approved
+            const allApproved = await areAllStitchingTasksApproved(orderId);
+            if (!allApproved) {
+                setToast({ message: "All mandatory tasks must be approved first", type: "error" });
+                return;
+            }
+
+            // Get order to determine next stage
+            const orderData = ordersWithTasks.find(o => o.order.orderId === orderId);
+            if (!orderData) {
+                throw new Error("Order not found");
+            }
+
+            // Determine next stage dynamically (usually ironing or billing)
+            const nextStage = getNextStage("stitching", orderData.order.activeStages);
+
+            // Update order to next stage
+            await updateDoc(doc(db, "orders", orderId), {
+                currentStage: nextStage || "billing",
+                status: nextStage ? "in_progress" : "completed",
+            });
+
+            // Add timeline entry for stitching completion
+            await addTimelineEntry(orderId, {
+                staffId: userData.staffId,
+                role: userData.role,
+                stage: "stitching",
+                action: "completed",
+            });
+
+            // Log staff work
+            await logStaffWork({
+                staffId: userData.staffId,
+                firebaseUid: userData.email,
+                email: userData.email,
+                role: userData.role,
+                orderId: orderId,
+                stage: "stitching",
+                action: "checked_ok",
+            });
+
+            setToast({ message: `Stitching complete! Order moved to ${nextStage || "billing"}`, type: "success" });
+            loadData();
+        } catch (error) {
+            console.error("Failed to complete stitching:", error);
+            const errorMessage = error instanceof Error ? error.message : "Failed to complete stitching";
+            setToast({ message: errorMessage, type: "error" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const getStatusConfig = (status: string) => {
+        const configs: Record<string, { bg: string; text: string; label: string }> = {
+            not_started: { bg: "bg-slate-700", text: "text-slate-300", label: "Not Started" },
+            in_progress: { bg: "bg-blue-700", text: "text-blue-100", label: "In Progress" },
+            completed: { bg: "bg-yellow-700", text: "text-yellow-100", label: "Awaiting Review" },
+            needs_rework: { bg: "bg-red-700", text: "text-red-100", label: "Needs Rework" },
+            approved: { bg: "bg-emerald-700", text: "text-emerald-100", label: "Approved" },
+        };
+        return configs[status] || configs.not_started;
+    };
+
+    const getDueDateStatus = (dueDate: any) => {
+        if (!dueDate) return { label: "No due date", color: "text-slate-400" };
+        const date = dueDate.toDate ? dueDate.toDate() : new Date(dueDate);
+        const today = new Date();
+        const diff = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, color: "text-red-400" };
+        if (diff === 0) return { label: "Due today", color: "text-orange-400" };
+        if (diff <= 2) return { label: `${diff}d left`, color: "text-yellow-400" };
+        return { label: `${diff}d left`, color: "text-green-400" };
+    };
+
+    const getProgress = (tasks: StitchingTask[]) => {
+        const mandatory = tasks.filter(t => t.isMandatory);
+        const approved = mandatory.filter(t => t.status === "approved").length;
+        return { approved, total: mandatory.length, allApproved: approved === mandatory.length };
+    };
+
+    if (loading) {
+        return (
+            <ProtectedRoute allowedRoles={["stitching_checker", "supervisor", "admin"]}>
+                <div className="min-h-screen bg-slate-900">
+                    <TopBar />
+                    <div className="flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
+                    </div>
+                </div>
+            </ProtectedRoute>
+        );
+    }
+
     return (
         <ProtectedRoute allowedRoles={["stitching_checker", "supervisor", "admin"]}>
-            <div className="page-container min-h-screen">
+            <div className="min-h-screen bg-slate-900">
                 <TopBar />
 
-                <div className="page-content">
-                    <div className="mb-6">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                            Stitching Check
-                        </h1>
-                        <p className="text-gray-600 dark:text-gray-400">
-                            Review and approve stitching work
-                        </p>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-200 mb-2 flex items-center gap-2">
+                                <CheckSquare className="w-8 h-8 text-purple-400" />
+                                <span>Stitching Check</span>
+                            </h1>
+                            <p className="text-slate-400">
+                                {ordersWithTasks.length} order(s) awaiting approval
+                            </p>
+                        </div>
+                        <button
+                            onClick={loadData}
+                            disabled={loading}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 text-gray-200 rounded-lg hover:bg-slate-600"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                            <span>Refresh</span>
+                        </button>
                     </div>
 
-                    <StagePageContent
-                        stageName="stitching_checker"
-                        stageDisplayName="Stitching Check"
-                        isChecker={true}
-                        previousStage="stitching"
-                    />
+                    {ordersWithTasks.length === 0 ? (
+                        <div className="bg-slate-800 border border-slate-700 rounded-xl p-12 text-center">
+                            <AlertCircle className="w-12 h-12 mx-auto text-slate-500 mb-4" />
+                            <h3 className="text-lg font-medium text-gray-200 mb-2">
+                                No Orders to Review
+                            </h3>
+                            <p className="text-slate-400">
+                                No orders are currently in the stitching stage.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {ordersWithTasks.map(({ order, tasks }) => {
+                                const dueStatus = getDueDateStatus(order.dueDate);
+                                const progress = getProgress(tasks);
+
+                                return (
+                                    <div key={order.orderId} className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+                                        {/* Order Header */}
+                                        <div className="bg-slate-750 px-4 py-3 border-b border-slate-700">
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="font-semibold text-gray-200">
+                                                                {order.customerName || "Unknown Customer"}
+                                                            </h3>
+                                                            <span className="text-xs font-mono bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
+                                                                #{order.orderId.slice(0, 8)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 mt-1 text-sm">
+                                                            <span className="text-slate-400 capitalize">
+                                                                {order.garmentType?.replace(/_/g, " ") || "Unknown"}
+                                                            </span>
+                                                            <span className={`flex items-center gap-1 ${dueStatus.color}`}>
+                                                                <Calendar className="w-3 h-3" />
+                                                                {dueStatus.label}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {/* Progress Indicator */}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex items-center bg-slate-700 rounded-full h-2 w-24">
+                                                            <div
+                                                                className="bg-purple-500 h-2 rounded-full transition-all"
+                                                                style={{ width: `${(progress.approved / progress.total) * 100}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-gray-200">
+                                                            {progress.approved}/{progress.total}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Complete Button */}
+                                                    <button
+                                                        onClick={() => handleCompleteStitching(order.orderId)}
+                                                        disabled={!progress.allApproved || actionLoading === order.orderId}
+                                                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${progress.allApproved
+                                                            ? "bg-purple-600 text-white hover:bg-purple-700"
+                                                            : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                                                            }`}
+                                                    >
+                                                        {actionLoading === order.orderId ? "..." : "Complete"}
+                                                        <ChevronRight className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Tasks Grid */}
+                                        <div className="p-4">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                {tasks.map((task) => {
+                                                    const statusConfig = getStatusConfig(task.status);
+                                                    const canApprove = task.status === "completed";
+
+                                                    return (
+                                                        <div
+                                                            key={task.taskId}
+                                                            className={`border rounded-xl p-3 ${task.status === "approved"
+                                                                ? "border-emerald-700 bg-emerald-900/20"
+                                                                : task.status === "needs_rework"
+                                                                    ? "border-red-700 bg-red-900/20"
+                                                                    : "border-slate-600 bg-slate-750"
+                                                                }`}
+                                                        >
+                                                            {/* Task Header */}
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div>
+                                                                    <h4 className="font-medium text-gray-200 text-sm">
+                                                                        {task.taskName}
+                                                                    </h4>
+                                                                    {task.isMandatory && (
+                                                                        <span className="text-xs bg-orange-900 text-orange-200 px-1.5 py-0.5 rounded">Required</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                                                                    {statusConfig.label}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Assignment */}
+                                                            <div className="mb-3">
+                                                                <select
+                                                                    value={task.assignedStaffId || ""}
+                                                                    onChange={(e) => handleAssignTask(task.taskId, e.target.value, order.orderId)}
+                                                                    disabled={actionLoading === task.taskId}
+                                                                    className="w-full text-xs px-2 py-1.5 border border-slate-600 rounded bg-slate-700 text-gray-200"
+                                                                >
+                                                                    <option value="">Unassigned</option>
+                                                                    {staffList.map((s) => (
+                                                                        <option key={s.staffId} value={s.staffId}>
+                                                                            {s.name}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
+                                                            {/* Approve/Reject Actions */}
+                                                            {canApprove && (
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => handleApproveTask(task.taskId, order.orderId)}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50"
+                                                                    >
+                                                                        <Check className="w-3 h-3" />
+                                                                        Approve
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setRejectModal({ taskId: task.taskId, reason: "" })}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 disabled:opacity-50"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                        Reject
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Approved By */}
+                                                            {task.status === "approved" && task.approvedByName && (
+                                                                <div className="text-xs text-emerald-400 flex items-center gap-1">
+                                                                    <Check className="w-3 h-3" />
+                                                                    Approved by {task.approvedByName}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Notes */}
+                                                            {task.notes && (
+                                                                <div className="mt-2 p-2 bg-orange-900/30 border border-orange-800 rounded text-xs text-orange-200">
+                                                                    {task.notes}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
+
+                {/* Reject Modal */}
+                {rejectModal && (
+                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9998 }}>
+                        <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-md w-full p-6">
+                            <h3 className="text-lg font-semibold text-gray-200 mb-4">
+                                Reject Task - Send for Rework
+                            </h3>
+                            <textarea
+                                value={rejectModal.reason}
+                                onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
+                                placeholder="Reason for rejection (required)"
+                                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-gray-200 mb-4"
+                                rows={3}
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setRejectModal(null)}
+                                    className="flex-1 px-4 py-2 bg-slate-700 text-gray-200 rounded-lg hover:bg-slate-600"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleRejectTask(rejectModal.taskId, rejectModal.reason)}
+                                    disabled={!rejectModal.reason.trim() || actionLoading === rejectModal.taskId}
+                                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                                >
+                                    {actionLoading === rejectModal.taskId ? "..." : "Reject"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
             </div>
         </ProtectedRoute>
     );

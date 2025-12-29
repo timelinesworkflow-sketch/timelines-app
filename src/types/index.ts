@@ -340,6 +340,49 @@ export interface CuttingTask {
 }
 
 // ============================================
+// STITCHING STAGE TYPES
+// ============================================
+
+// Stitching Task Status
+export type StitchingTaskStatus = "not_started" | "in_progress" | "completed" | "needs_rework" | "approved";
+
+// Stitching Template Task (definition in template)
+export interface StitchingTemplateTask {
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+}
+
+// Stitching Template (defines tasks for a garment type)
+export interface StitchingTemplate {
+    templateId: string;
+    garmentType: GarmentType;
+    tasks: StitchingTemplateTask[];
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+}
+
+// Stitching Task (order-specific instance of a template task)
+export interface StitchingTask {
+    taskId: string;
+    orderId: string;
+    taskName: string;
+    taskOrder: number;
+    isMandatory: boolean;
+    status: StitchingTaskStatus;
+    assignedStaffId?: string;
+    assignedStaffName?: string;
+    startedAt?: Timestamp;
+    completedAt?: Timestamp;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: Timestamp;
+    notes?: string;
+    // Dynamic sub-stage ID for eligibility/default matching
+    subStageId?: string;
+}
+
+// ============================================
 // MULTI-ITEM WORKFLOW TYPES
 // ============================================
 
