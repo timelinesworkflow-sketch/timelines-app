@@ -13,6 +13,7 @@ import {
     rejectMarkingTask,
     assignMarkingTask,
     areAllMarkingTasksApproved,
+    startMarkingTask,
 } from "@/lib/markingTemplates";
 import { generateCuttingTasksForOrder, getCuttingTasksForOrder } from "@/lib/cuttingTemplates";
 import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
@@ -24,6 +25,13 @@ interface TaskGroup {
     order?: Order;
     tasks: MarkingTask[];
 }
+
+// Helper: Check if a task is a Quality Check (checker) task
+const isCheckerTask = (task: MarkingTask): boolean => {
+    const nameMatch = task.taskName?.toLowerCase().includes("quality check") ?? false;
+    const subStageMatch = task.subStageId?.toLowerCase().includes("quality_check") ?? false;
+    return nameMatch || subStageMatch;
+};
 
 export default function MarkingCheckPage() {
     const { userData } = useAuth();
@@ -78,6 +86,26 @@ export default function MarkingCheckPage() {
 
                 // Sort tasks by taskOrder
                 orderTasks.sort((a, b) => a.taskOrder - b.taskOrder);
+
+                // Auto-claim checker tasks for logged-in checker
+                for (const task of orderTasks) {
+                    if (isCheckerTask(task) && (!task.assignedStaffId || task.assignedStaffId === null)) {
+                        try {
+                            // Auto-assign to logged-in checker
+                            await updateDoc(doc(db, "markingTasks", task.taskId), {
+                                assignedStaffId: userData.staffId,
+                                assignedStaffName: userData.name,
+                            });
+                            // Auto-start the task
+                            await startMarkingTask(task.taskId);
+                            // Update local task object
+                            task.assignedStaffId = userData.staffId;
+                            task.assignedStaffName = userData.name;
+                        } catch (err) {
+                            console.error(`Failed to auto-claim checker task ${task.taskId}:`, err);
+                        }
+                    }
+                }
 
                 groups.push({ orderId, order, tasks: orderTasks });
             }
@@ -195,7 +223,7 @@ export default function MarkingCheckPage() {
                 const existingCuttingTasks = await getCuttingTasksForOrder(orderId);
                 if (!existingCuttingTasks || existingCuttingTasks.length === 0) {
                     await generateCuttingTasksForOrder(orderId, order.garmentType);
-                    
+
                     // Add timeline entry for cutting stage started
                     await addTimelineEntry(orderId, {
                         staffId: userData.staffId,
