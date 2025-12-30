@@ -647,7 +647,7 @@ export default function MaterialsPage() {
                                                                 </div>
                                                                 <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                                                     {purchase.colour && <span className="mr-3">Color: {purchase.colour}</span>}
-                                                                    <span>Quantity: {purchase.measurement} {purchase.unit}</span>
+                                                                    <span>For Order: {purchase.measurement} {purchase.unit}</span>
                                                                 </div>
                                                                 {purchase.completedByStaffName && (
                                                                     <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
@@ -655,23 +655,24 @@ export default function MaterialsPage() {
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                            <div className="flex flex-col items-end gap-2">
-                                                                {!purchase.addedToInventory && (
-                                                                    <button
-                                                                        onClick={() => handleAddLeftoverToInventory(purchase)}
-                                                                        disabled={addingToInventory === purchase.purchaseId}
-                                                                        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                                                                    >
-                                                                        <Warehouse className="w-3 h-3" />
-                                                                        {addingToInventory === purchase.purchaseId ? "Adding..." : "Add Leftover to Inventory"}
-                                                                    </button>
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                {/* Show actual purchased and excess info */}
+                                                                {purchase.actualPurchasedQuantity && purchase.actualPurchasedQuantity > purchase.measurement && (
+                                                                    <>
+                                                                        <span className="text-xs text-gray-500">
+                                                                            Actual: {purchase.actualPurchasedQuantity} {purchase.unit}
+                                                                        </span>
+                                                                        {purchase.excessQuantity && purchase.excessQuantity > 0 && (
+                                                                            <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                                                                <Check className="w-3 h-3" />
+                                                                                {purchase.excessQuantity.toFixed(2)} {purchase.unit} → Inventory
+                                                                            </span>
+                                                                        )}
+                                                                    </>
                                                                 )}
-                                                                {purchase.addedToInventory && (
-                                                                    <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                                                        <Check className="w-3 h-3" />
-                                                                        Added to inventory
-                                                                    </span>
-                                                                )}
+                                                                <span className="mt-1 px-2 py-1 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 text-xs rounded">
+                                                                    Ready for use ✓
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     ))}

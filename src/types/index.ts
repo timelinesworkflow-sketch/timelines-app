@@ -226,6 +226,10 @@ export interface PurchaseRequest {
     completedByStaffName?: string;
     completedAt?: Timestamp;
     createdAt: Timestamp;
+    // Actual purchase tracking (when completing the purchase)
+    actualPurchasedQuantity?: number;  // What was actually purchased
+    excessQuantity?: number;           // actualPurchased - measurement (requested)
+    excessAddedToInventory?: boolean;  // True if excess auto-added to inventory
     // Leftover tracking (for Materials stage to add to inventory)
     addedToInventory?: boolean;
     addedToInventoryQuantity?: number;

@@ -162,6 +162,31 @@ export async function completePurchase(
 }
 
 /**
+ * Complete an order-based purchase with actual quantity tracking
+ * - Records actual purchased quantity and excess
+ * - Excess is auto-added to inventory by the calling component
+ */
+export async function completePurchaseWithQuantity(
+    purchaseId: string,
+    completedByStaffId: string,
+    completedByStaffName: string,
+    actualPurchasedQuantity: number,
+    excessQuantity: number
+): Promise<void> {
+    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+
+    await updateDoc(purchaseRef, {
+        status: "completed" as PurchaseStatus,
+        completedByStaffId,
+        completedByStaffName,
+        completedAt: Timestamp.now(),
+        actualPurchasedQuantity,
+        excessQuantity,
+        excessAddedToInventory: excessQuantity > 0,
+    });
+}
+
+/**
  * Update purchase status
  */
 export async function updatePurchaseStatus(

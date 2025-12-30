@@ -5,9 +5,9 @@ import TopBar from "@/components/TopBar";
 import Toast from "@/components/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { PurchaseRequest, PurchaseType } from "@/types";
-import { getPendingPurchases, completePurchase } from "@/lib/purchases";
+import { getPendingPurchases, completePurchase, completePurchaseWithQuantity } from "@/lib/purchases";
 import { recordMaterialPurchase } from "@/lib/inventory";
-import { Package, ShoppingCart, Warehouse, Check, AlertCircle, Calendar } from "lucide-react";
+import { Package, ShoppingCart, Warehouse, Check, AlertCircle, Calendar, X } from "lucide-react";
 import DateFilter, { DateFilterType, filterByDate } from "@/components/DateFilter";
 
 export default function PurchasePageContent() {
@@ -19,6 +19,12 @@ export default function PurchasePageContent() {
     const [completingId, setCompletingId] = useState<string | null>(null);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
     const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
+
+    // Completion modal state (for order-based purchases)
+    const [completeModal, setCompleteModal] = useState<{
+        purchase: PurchaseRequest;
+        actualQuantity: string;
+    } | null>(null);
 
     useEffect(() => {
         loadPurchases();
@@ -42,26 +48,95 @@ export default function PurchasePageContent() {
     const handleCompletePurchase = async (purchase: PurchaseRequest) => {
         if (!userData) return;
 
+        // For order-based purchases, show modal to enter actual quantity
+        if (purchase.purchaseType === "order") {
+            setCompleteModal({
+                purchase,
+                actualQuantity: purchase.measurement.toString(),
+            });
+            return;
+        }
+
+        // For inventory purchases, complete directly and add to inventory
         setCompletingId(purchase.purchaseId);
         try {
             await completePurchase(purchase.purchaseId, userData.staffId, userData.name);
 
-            // For inventory purchases, add to inventory
-            if (purchase.purchaseType === "inventory") {
+            // Add to inventory
+            await recordMaterialPurchase({
+                materialId: purchase.materialId,
+                materialName: purchase.materialName,
+                category: "",
+                quantity: 1,
+                meter: purchase.measurement,
+                costPerMeter: 0,
+                staffId: userData.staffId,
+                staffName: userData.name,
+            });
+
+            setToast({ message: "Purchase completed and added to inventory!", type: "success" });
+            loadPurchases();
+        } catch (error) {
+            console.error("Failed to complete purchase:", error);
+            setToast({ message: "Failed to complete purchase", type: "error" });
+        } finally {
+            setCompletingId(null);
+        }
+    };
+
+    // Handle order-based purchase completion with actual quantity
+    const handleCompleteOrderPurchase = async () => {
+        if (!userData || !completeModal) return;
+
+        const { purchase, actualQuantity } = completeModal;
+        const actualQty = parseFloat(actualQuantity);
+        const requestedQty = purchase.measurement;
+
+        if (isNaN(actualQty) || actualQty <= 0) {
+            setToast({ message: "Please enter a valid quantity", type: "error" });
+            return;
+        }
+
+        if (actualQty < requestedQty) {
+            setToast({ message: `Actual quantity must be at least ${requestedQty} ${purchase.unit} (requested amount)`, type: "error" });
+            return;
+        }
+
+        setCompletingId(purchase.purchaseId);
+        try {
+            // Calculate excess
+            const excessQty = actualQty - requestedQty;
+
+            // Complete purchase with actual quantity tracking
+            await completePurchaseWithQuantity(
+                purchase.purchaseId,
+                userData.staffId,
+                userData.name,
+                actualQty,
+                excessQty
+            );
+
+            // If there's excess, auto-add to inventory
+            if (excessQty > 0) {
                 await recordMaterialPurchase({
                     materialId: purchase.materialId,
                     materialName: purchase.materialName,
-                    category: "",
+                    category: purchase.colour || "",
                     quantity: 1,
-                    meter: purchase.measurement,
+                    meter: excessQty,
                     costPerMeter: 0,
                     staffId: userData.staffId,
                     staffName: userData.name,
                 });
+                setToast({
+                    message: `Purchase completed! ${excessQty.toFixed(2)} ${purchase.unit} excess auto-added to inventory.`,
+                    type: "success"
+                });
+            } else {
+                setToast({ message: "Purchase completed! Material assigned to order.", type: "success" });
             }
-            // For order purchases, the materials will be picked up by the materials stage
 
-            setToast({ message: "Purchase completed successfully!", type: "success" });
+            setCompleteModal(null);
             loadPurchases();
         } catch (error) {
             console.error("Failed to complete purchase:", error);
@@ -257,6 +332,86 @@ export default function PurchasePageContent() {
                     </div>
                 )}
             </div>
+
+            {/* Completion Modal for Order-Based Purchases */}
+            {completeModal && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9998 }}>
+                    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl max-w-md w-full p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200">
+                                Complete Purchase
+                            </h3>
+                            <button onClick={() => setCompleteModal(null)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="mb-4 p-3 bg-gray-50 dark:bg-slate-700 rounded-lg">
+                            <p className="font-medium text-gray-900 dark:text-gray-200">{completeModal.purchase.materialName}</p>
+                            {completeModal.purchase.colour && (
+                                <p className="text-sm text-gray-600 dark:text-gray-400">Color: {completeModal.purchase.colour}</p>
+                            )}
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Requested: <span className="font-semibold">{completeModal.purchase.measurement} {completeModal.purchase.unit}</span>
+                            </p>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Actual Purchased Quantity ({completeModal.purchase.unit})
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min={completeModal.purchase.measurement}
+                                value={completeModal.actualQuantity}
+                                onChange={(e) => setCompleteModal({ ...completeModal, actualQuantity: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-200"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Enter the actual amount purchased (must be ≥ {completeModal.purchase.measurement} {completeModal.purchase.unit})
+                            </p>
+                        </div>
+
+                        {/* Excess Calculation Preview */}
+                        {parseFloat(completeModal.actualQuantity) > completeModal.purchase.measurement && (
+                            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                <p className="text-sm text-blue-800 dark:text-blue-300">
+                                    <strong>Excess Material:</strong> {(parseFloat(completeModal.actualQuantity) - completeModal.purchase.measurement).toFixed(2)} {completeModal.purchase.unit}
+                                </p>
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                    ✅ This excess will be auto-added to inventory
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCompleteModal(null)}
+                                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCompleteOrderPurchase}
+                                disabled={completingId === completeModal.purchase.purchaseId}
+                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {completingId === completeModal.purchase.purchaseId ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                ) : (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Complete
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
 }
