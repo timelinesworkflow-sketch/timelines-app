@@ -212,13 +212,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 totalItems,
                 completedItems,
                 overallStatus,
-                // Planned materials
+                // Planned materials (null if empty - Firestore doesn't accept undefined)
                 plannedMaterials: validPlannedMaterials.length > 0 ? {
                     items: validPlannedMaterials,
                     plannedByStaffId: userData?.staffId || "",
                     plannedByStaffName: userData?.name || "",
                     plannedAt: Timestamp.now(),
-                } : undefined,
+                } : null,
             };
 
             const orderId = await createOrder(orderData);

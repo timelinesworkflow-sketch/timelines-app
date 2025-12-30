@@ -452,7 +452,7 @@ export interface Order {
     materialsCostPlanned: number | null;
     changeHistory: ChangeHistoryEntry[];
     billing?: OrderBilling;
-    plannedMaterials?: OrderPlannedMaterials;
+    plannedMaterials?: OrderPlannedMaterials | null;
     materials?: OrderMaterials;
     // Financial fields
     price?: number;

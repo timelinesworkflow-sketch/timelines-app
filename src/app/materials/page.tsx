@@ -34,9 +34,11 @@ import {
     FileText,
     Ruler,
     X,
-    Shirt
+    Shirt,
+    Edit
 } from "lucide-react";
 import Toast from "@/components/Toast";
+import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
 type TabType = "orders" | "inventory";
 
@@ -77,6 +79,11 @@ export default function MaterialsPage() {
     // Completed order purchases state (for showing purchased materials for this order)
     const [completedOrderPurchases, setCompletedOrderPurchases] = useState<PurchaseRequest[]>([]);
     const [addingToInventory, setAddingToInventory] = useState<string | null>(null);
+
+    // Edit Materials Modal state
+    const [showEditMaterialsModal, setShowEditMaterialsModal] = useState(false);
+    const [editingMaterials, setEditingMaterials] = useState<PlannedMaterial[]>([]);
+    const [savingMaterials, setSavingMaterials] = useState(false);
 
     useEffect(() => {
         loadOrders();
@@ -195,9 +202,55 @@ export default function MaterialsPage() {
 
     const currentOrder = orders[currentIndex];
 
+    // Open edit materials modal with current materials
+    const handleOpenEditModal = () => {
+        const currentMaterials = currentOrder?.plannedMaterials?.items || [];
+        setEditingMaterials([...currentMaterials]);
+        setShowEditMaterialsModal(true);
+    };
+
+    // Save edited materials to order
+    const handleSaveMaterials = async () => {
+        if (!currentOrder || !userData) return;
+
+        setSavingMaterials(true);
+        try {
+            const validMaterials = editingMaterials.filter(
+                m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
+            );
+
+            await updateOrder(currentOrder.orderId, {
+                plannedMaterials: validMaterials.length > 0 ? {
+                    items: validMaterials,
+                    plannedByStaffId: userData.staffId,
+                    plannedByStaffName: userData.name,
+                    plannedAt: Timestamp.now(),
+                } : null,
+            });
+
+            setToast({ message: "Materials updated successfully!", type: "success" });
+            setShowEditMaterialsModal(false);
+
+            // Reload orders and re-check stock
+            await loadOrders();
+            if (validMaterials.length > 0) {
+                await loadMaterialsWithStatus(validMaterials);
+            } else {
+                setMaterialsWithStatus([]);
+            }
+        } catch (error) {
+            console.error("Failed to save materials:", error);
+            setToast({ message: "Failed to save materials", type: "error" });
+        } finally {
+            setSavingMaterials(false);
+        }
+    };
+
     // Check if all materials are satisfied (in stock OR have completed purchase)
+    // OR if no materials are planned (can complete stage directly)
     const canCompleteStage = () => {
-        if (materialsWithStatus.length === 0) return false;
+        // If no materials planned, stage can be completed
+        if (materialsWithStatus.length === 0) return true;
 
         return materialsWithStatus.every(material => {
             // In stock or customer provided - OK
@@ -541,20 +594,36 @@ export default function MaterialsPage() {
 
                                     {/* Planned Materials with Stock Status */}
                                     <div className="mb-6">
-                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                            <Eye className="w-5 h-5 text-indigo-600" />
-                                            <span>Materials Required (from Intake)</span>
-                                        </h3>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
+                                                <Eye className="w-5 h-5 text-indigo-600" />
+                                                <span>Materials Required</span>
+                                            </h3>
+                                            <button
+                                                onClick={handleOpenEditModal}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                                Edit Materials
+                                            </button>
+                                        </div>
 
                                         {materialsWithStatus.length === 0 ? (
-                                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                                                 <div className="flex items-start space-x-2">
-                                                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                                                    <div>
-                                                        <p className="font-medium text-yellow-800 dark:text-yellow-300">No materials planned at intake</p>
-                                                        <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                                                            Click <strong>&quot;View Order Requirements&quot;</strong> to see measurements and determine what materials are needed.
+                                                    <Package className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-blue-800 dark:text-blue-300">No materials planned</p>
+                                                        <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                                                            You can add materials using the <strong>&quot;Edit Materials&quot;</strong> button, or skip directly to stage completion if no materials are needed.
                                                         </p>
+                                                        <button
+                                                            onClick={handleOpenEditModal}
+                                                            className="mt-3 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                            Add Materials
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1108,6 +1177,58 @@ export default function MaterialsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Edit Materials Modal */}
+            {showEditMaterialsModal && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9998 }}>
+                    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200">
+                                Edit Materials for Order
+                            </h3>
+                            <button onClick={() => setShowEditMaterialsModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                                Add or edit materials required for this order. After saving, the system will check stock availability.
+                            </p>
+                        </div>
+
+                        <PlannedMaterialsInput
+                            initialItems={editingMaterials}
+                            onChange={(items) => setEditingMaterials(items)}
+                        />
+
+                        <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={() => setShowEditMaterialsModal(false)}
+                                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveMaterials}
+                                disabled={savingMaterials}
+                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {savingMaterials ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                ) : (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Save Materials
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </ProtectedRoute>
     );
 }
