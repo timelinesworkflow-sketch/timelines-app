@@ -69,7 +69,60 @@ export interface ChangeHistoryEntry {
     verifiedByOtp: boolean;
 }
 
+// Bill Line Item for itemized billing
+export interface BillLineItem {
+    sno: number;
+    particular: string;
+    qty: number;
+    price: number;
+    total: number;  // qty × price
+}
+
+// Predefined bill particulars (from billing format)
+export const BILL_PARTICULARS = [
+    "Aari work",
+    "Aari stitch company",
+    "Aari stitch customer",
+    "Lining blouse stitch",
+    "Puff design",
+    "Design blouse",
+    "Lining comp",
+    "Lining cus",
+    "Saree fall hemming",
+    "Company blouse",
+    "Lining blouse prince cut",
+    "Saree pre pleat",
+    "Saree knot",
+    "Extra lining",
+    "Extra silkcotton",
+    "Readymade knot",
+    "Piping",
+    "Chudi",
+    "Top",
+    "Pant",
+    "Machine embroidery",
+    "Blouse stitching",
+    "Pavada stitching",
+    "Sattai stitching",
+    "Alteration",
+    "Ironing",
+    "Other"
+] as const;
+
+export type BillParticular = typeof BILL_PARTICULARS[number];
+
+// Bill Status for tracking
+export type BillStatus = "draft" | "generated" | "paid" | "delivered";
+
 export interface OrderBilling {
+    // Bill identification
+    billNumber: string;
+    billDate: Timestamp;
+
+    // Line items for detailed billing
+    lineItems: BillLineItem[];
+
+    // Legacy charge fields (for backward compatibility)
     markingCharges: number;
     cuttingCharges: number;
     stitchingCharges: number;
@@ -77,16 +130,39 @@ export interface OrderBilling {
     ironingCharges: number;
     extraWorkCharges: number;
     materialsCost: number;
+
+    // Calculated totals
+    subtotal: number;           // Sum of lineItems totals
     totalAmount: number;
     discountEnabled: boolean;
     discountAmount: number;
     finalAmount: number;
+
+    // Payment info
     amountReceived: number;
+    advancePaid: number;
     balance: number;
     paymentStatus: "paid" | "partially_paid" | "not_paid";
     paymentMode: "cash" | "upi" | "card" | "other";
+
+    // Bill status tracking
+    status: BillStatus;
+
+    // Billing staff info
     billedByStaffId: string;
+    billedByStaffName?: string;
     billedAt: Timestamp;
+
+    // Payment completion
+    paidAt?: Timestamp;
+    paidReceivedByStaffId?: string;
+    paidReceivedByStaffName?: string;
+
+    // Delivery tracking
+    deliveredAt?: Timestamp;
+    deliveredByStaffId?: string;
+    deliveredByStaffName?: string;
+    deliveryNotes?: string;
 }
 
 // ============================================
