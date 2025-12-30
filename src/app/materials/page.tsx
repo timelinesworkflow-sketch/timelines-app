@@ -195,6 +195,27 @@ export default function MaterialsPage() {
 
     const currentOrder = orders[currentIndex];
 
+    // Check if all materials are satisfied (in stock OR have completed purchase)
+    const canCompleteStage = () => {
+        if (materialsWithStatus.length === 0) return false;
+
+        return materialsWithStatus.every(material => {
+            // In stock or customer provided - OK
+            const status = material.stockStatus as string;
+            if (status === "in_stock" || status === "customer_provided") {
+                return true;
+            }
+
+            // Check if there's a completed purchase for this material
+            const hasPurchase = completedOrderPurchases.some(p =>
+                p.materialName.toLowerCase() === material.materialName.toLowerCase() ||
+                p.materialId === material.materialId
+            );
+
+            return hasPurchase;
+        });
+    };
+
     const handleConfirmUsage = async () => {
         if (!currentOrder || !userData) return;
 
@@ -607,6 +628,61 @@ export default function MaterialsPage() {
                                         )}
                                     </div>
 
+                                    {/* Completed Order Purchases Section */}
+                                    {completedOrderPurchases.length > 0 && (
+                                        <div className="mb-6">
+                                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
+                                                <CheckCircle className="w-5 h-5 text-green-600" />
+                                                <span>Completed Purchases for this Order</span>
+                                                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{completedOrderPurchases.length}</span>
+                                            </h3>
+                                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                                                <div className="space-y-3">
+                                                    {completedOrderPurchases.map((purchase) => (
+                                                        <div key={purchase.purchaseId} className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-lg border border-green-200 dark:border-green-700">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium text-green-800 dark:text-green-300">{purchase.materialName}</span>
+                                                                    <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">✅ Purchased</span>
+                                                                </div>
+                                                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                                                    {purchase.colour && <span className="mr-3">Color: {purchase.colour}</span>}
+                                                                    <span>Quantity: {purchase.measurement} {purchase.unit}</span>
+                                                                </div>
+                                                                {purchase.completedByStaffName && (
+                                                                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                                                        Completed by: {purchase.completedByStaffName}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex flex-col items-end gap-2">
+                                                                {!purchase.addedToInventory && (
+                                                                    <button
+                                                                        onClick={() => handleAddLeftoverToInventory(purchase)}
+                                                                        disabled={addingToInventory === purchase.purchaseId}
+                                                                        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                                                                    >
+                                                                        <Warehouse className="w-3 h-3" />
+                                                                        {addingToInventory === purchase.purchaseId ? "Adding..." : "Add Leftover to Inventory"}
+                                                                    </button>
+                                                                )}
+                                                                {purchase.addedToInventory && (
+                                                                    <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                                                        <Check className="w-3 h-3" />
+                                                                        Added to inventory
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="mt-3 text-sm text-green-700 dark:text-green-400">
+                                                    💡 These materials are now available for this order. You can proceed with stage completion.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Quick Purchase Button */}
                                     <div className="mb-6">
                                         <button
@@ -621,7 +697,7 @@ export default function MaterialsPage() {
                                     {/* Confirm Usage Button */}
                                     <button
                                         onClick={handleConfirmUsage}
-                                        disabled={actionLoading || materialsWithStatus.length === 0 || materialsWithStatus.some(m => m.stockStatus !== "in_stock")}
+                                        disabled={actionLoading || !canCompleteStage()}
                                         className="w-full btn btn-primary flex items-center justify-center space-x-2 disabled:opacity-50"
                                     >
                                         <Check className="w-5 h-5" />
