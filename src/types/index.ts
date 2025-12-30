@@ -9,6 +9,7 @@ export type UserRole =
     | "marking_checker"
     | "cutting"
     | "cutting_checker"
+    | "aari"
     | "stitching"
     | "stitching_checker"
     | "hooks"

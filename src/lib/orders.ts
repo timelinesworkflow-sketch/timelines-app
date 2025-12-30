@@ -112,6 +112,7 @@ export function getNextStage(currentStage: string, activeStages: string[]): stri
         "marking_checker",
         "cutting",
         "cutting_checker",
+        "aari_work",
         "stitching",
         "stitching_checker",
         "hooks",

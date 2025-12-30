@@ -74,12 +74,25 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     useEffect(() => {
         // Initialize measurements for selected garment type
-        const fields = MEASUREMENT_FIELDS[garmentType];
+        // RE types use same measurements as base garment
+        const baseType = garmentType === "re_blouse" ? "blouse"
+            : garmentType === "re_pavada_sattai" ? "pavadai_sattai"
+                : garmentType;
+        const fields = MEASUREMENT_FIELDS[baseType] || MEASUREMENT_FIELDS["blouse"];
         const initialMeasurements: Record<string, string> = {};
         fields.forEach((field) => {
             initialMeasurements[field] = measurements[field] || "";
         });
         setMeasurements(initialMeasurements);
+
+        // Auto-update stages for RE garment types (include aari_work before stitching)
+        if (garmentType === "re_blouse" || garmentType === "re_pavada_sattai") {
+            // RE types need aari_work stage before stitching
+            setActiveStages(["materials", "marking", "cutting", "aari_work", "stitching", "ironing", "billing"]);
+        } else {
+            // Normal garment types - no aari_work
+            setActiveStages(["materials", "marking", "cutting", "stitching", "ironing", "billing"]);
+        }
     }, [garmentType]);
 
     // Lookup customer orders when phone number changes
