@@ -545,8 +545,8 @@ export interface Order {
     totalItems?: number;         // Computed: items.length
     completedItems?: number;     // Computed: items where status = "ready" or "delivered"
     overallStatus?: OverallOrderStatus;  // Computed from item statuses
-    // RE Work workflow
-    includeREWork?: boolean;     // For RE categories - includes RE Work stage
+    // Aari Work workflow
+    includeAariWork?: boolean;     // For Aari categories - includes Aari Work stage
 
     // Embedded Marking Tasks (Parallel Workflow)
     markingTasks?: MarkingTaskMap;

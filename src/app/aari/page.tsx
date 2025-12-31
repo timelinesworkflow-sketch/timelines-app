@@ -133,7 +133,7 @@ export default function AariPage() {
                             </h1>
                         </div>
                         <p className="text-gray-600 dark:text-gray-400">
-                            Special embroidery and design work for RE garments
+                            Special embroidery and design work for Aari garments
                         </p>
                     </div>
 
@@ -173,7 +173,7 @@ export default function AariPage() {
                             <Palette className="w-16 h-16 mx-auto text-gray-400 mb-4" />
                             <p className="text-gray-600 dark:text-gray-400">No orders waiting for Aari work</p>
                             <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-                                RE Blouse and RE Pavada Sattai orders will appear here after cutting
+                                Aari Blouse and Aari Pavada Sattai orders will appear here after cutting
                             </p>
                         </div>
                     ) : currentOrder && (

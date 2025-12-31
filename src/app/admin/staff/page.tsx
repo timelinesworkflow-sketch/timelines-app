@@ -478,6 +478,7 @@ export default function AdminStaffPage() {
                                         <option value="marking_checker">Marking Checker</option>
                                         <option value="cutting">Cutting</option>
                                         <option value="cutting_checker">Cutting Checker</option>
+                                        <option value="aari">Aari Worker</option>
                                         <option value="stitching">Stitching</option>
                                         <option value="stitching_checker">Stitching Checker</option>
                                         <option value="hooks">Hooks</option>

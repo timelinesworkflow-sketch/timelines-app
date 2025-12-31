@@ -66,8 +66,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
     const [showOrderHistory, setShowOrderHistory] = useState(false);
 
-    // RE Work toggle (for RE Blouse / RE Pavada Sattai categories)
-    const [includeREWork, setIncludeREWork] = useState(true);
+    // Aari Work toggle (for Aari Blouse / Aari Pavada Sattai categories)
+    const [includeAariWork, setIncludeAariWork] = useState(true);
 
     // Temp order ID for tracking
     const [tempOrderId, setTempOrderId] = useState("");
@@ -460,10 +460,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setIncludeREWork(!includeREWork)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${includeREWork ? "bg-purple-600" : "bg-gray-300"}`}
+                                onClick={() => setIncludeAariWork(!includeAariWork)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${includeAariWork ? "bg-purple-600" : "bg-gray-300"}`}
                             >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${includeREWork ? "translate-x-6" : "translate-x-1"}`} />
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${includeAariWork ? "translate-x-6" : "translate-x-1"}`} />
                             </button>
                         </div>
                     </div>
