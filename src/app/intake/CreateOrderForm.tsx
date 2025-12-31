@@ -74,9 +74,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     useEffect(() => {
         // Initialize measurements for selected garment type
-        // RE types use same measurements as base garment
-        const baseType = garmentType === "re_blouse" ? "blouse"
-            : garmentType === "re_pavada_sattai" ? "pavadai_sattai"
+        // Aari types use same measurements as base garment
+        const baseType = garmentType === "aari_blouse" ? "blouse"
+            : garmentType === "aari_pavada_sattai" ? "pavadai_sattai"
                 : garmentType;
         const fields = MEASUREMENT_FIELDS[baseType] || MEASUREMENT_FIELDS["blouse"];
         const initialMeasurements: Record<string, string> = {};
@@ -85,9 +85,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         });
         setMeasurements(initialMeasurements);
 
-        // Auto-update stages for RE garment types (include aari_work before stitching)
-        if (garmentType === "re_blouse" || garmentType === "re_pavada_sattai") {
-            // RE types need aari_work stage before stitching
+        // Auto-update stages for Aari garment types (include aari_work before stitching)
+        if (garmentType === "aari_blouse" || garmentType === "aari_pavada_sattai") {
+            // Aari types need aari_work stage before stitching
             setActiveStages(["materials", "marking", "cutting", "aari_work", "stitching", "ironing", "billing"]);
         } else {
             // Normal garment types - no aari_work
@@ -444,19 +444,19 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         <option value="chudi">Chudi</option>
                         <option value="frock">Frock</option>
                         <option value="pavadai_sattai">Pavadai Sattai</option>
-                        <option value="re_blouse">RE Blouse</option>
-                        <option value="re_pavada_sattai">RE Pavada Sattai</option>
+                        <option value="aari_blouse">Aari Blouse</option>
+                        <option value="aari_pavada_sattai">Aari Pavada Sattai</option>
                         <option value="other">Other</option>
                     </select>
                 </div>
 
-                {/* RE Work Toggle - Only for RE categories */}
-                {(garmentType === "re_blouse" || garmentType === "re_pavada_sattai") && (
+                {/* Aari Work Toggle - Only for Aari categories */}
+                {(garmentType === "aari_blouse" || garmentType === "aari_pavada_sattai") && (
                     <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <label className="font-medium text-purple-800 dark:text-purple-300">Include RE Work Stage</label>
-                                <p className="text-sm text-purple-600 dark:text-purple-400">RE staff will be included in this order workflow</p>
+                                <label className="font-medium text-purple-800 dark:text-purple-300">Include Aari Work Stage</label>
+                                <p className="text-sm text-purple-600 dark:text-purple-400">Aari staff will be included in this order workflow</p>
                             </div>
                             <button
                                 type="button"

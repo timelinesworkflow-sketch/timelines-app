@@ -37,7 +37,7 @@ export interface User {
     subStageDefaults?: Record<string, boolean>;
 }
 
-export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "re_blouse" | "re_pavada_sattai" | "other";
+export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "aari_blouse" | "aari_pavada_sattai" | "other";
 
 export type OrderStatus =
     | "draft"
@@ -684,8 +684,8 @@ export const MEASUREMENT_FIELDS: Record<GarmentType, string[]> = {
         "sleeveLoose",       // Sleeve Loose
         "pk",                // PK
     ],
-    re_blouse: [
-        // RE Blouse uses same measurements as regular blouse
+    aari_blouse: [
+        // Aari Blouse uses same measurements as regular blouse
         "blouseLength",      // BL
         "frontLength",       // FL
         "backNeck",          // BN
@@ -697,8 +697,8 @@ export const MEASUREMENT_FIELDS: Record<GarmentType, string[]> = {
         "armHole",           // ARM H
         "pk",                // PK
     ],
-    re_pavada_sattai: [
-        // RE Pavada Sattai uses same measurements as regular pavadai_sattai
+    aari_pavada_sattai: [
+        // Aari Pavada Sattai uses same measurements as regular pavadai_sattai
         "pavadaiFullLength", // Pavadai Full Length
         "hipLoose",          // Hip Loose
         "bodyPavadaiLength", // Body Pavadai Length

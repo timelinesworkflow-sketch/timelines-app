@@ -76,11 +76,11 @@ export const DEFAULT_MARKING_TEMPLATES: Record<GarmentType, MarkingTemplateTask[
         { taskName: "Length Marking", taskOrder: 2, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
     ],
-    re_blouse: [
+    aari_blouse: [
         { taskName: "Repair Area Marking", taskOrder: 1, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 2, isMandatory: true },
     ],
-    re_pavada_sattai: [
+    aari_pavada_sattai: [
         { taskName: "Repair Area Marking", taskOrder: 1, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 2, isMandatory: true },
     ],
@@ -227,7 +227,7 @@ export async function getAllTemplates(): Promise<MarkingTemplate[]> {
     }
 
     // Add defaults for any missing garment types
-    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "re_blouse", "re_pavada_sattai", "other"];
+    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other"];
     const now = Timestamp.now();
 
     garmentTypes.forEach(garmentType => {

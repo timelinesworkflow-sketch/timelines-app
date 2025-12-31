@@ -80,11 +80,11 @@ export const DEFAULT_STITCHING_TEMPLATES: Record<GarmentType, StitchingTemplateT
         { taskName: "Waist Band", taskOrder: 3, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 4, isMandatory: true },
     ],
-    re_blouse: [
+    aari_blouse: [
         { taskName: "Repair Stitching", taskOrder: 1, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 2, isMandatory: true },
     ],
-    re_pavada_sattai: [
+    aari_pavada_sattai: [
         { taskName: "Repair Stitching", taskOrder: 1, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 2, isMandatory: true },
     ],
@@ -203,7 +203,7 @@ export async function getStitchingTemplateForGarmentType(garmentType: GarmentTyp
  */
 export async function getAllStitchingTemplates(): Promise<StitchingTemplate[]> {
     const garmentTypes: GarmentType[] = [
-        "blouse", "chudi", "frock", "pavadai_sattai", "re_blouse", "re_pavada_sattai", "other"
+        "blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other"
     ];
 
     const templates: StitchingTemplate[] = [];

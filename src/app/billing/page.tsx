@@ -23,7 +23,7 @@ import {
     Download
 } from "lucide-react";
 import Toast from "@/components/Toast";
-import BillTemplate from "@/components/BillTemplate";
+import { generateBillPDF, createBillDataFromOrder } from "@/billing/generateBillPDF";
 
 type TabType = "create" | "pending" | "paid" | "delivered";
 
@@ -69,8 +69,6 @@ export default function BillingPage() {
     // Show/hide line items section
     const [showLineItems, setShowLineItems] = useState(true);
 
-    // Print bill modal state
-    const [showPrintModal, setShowPrintModal] = useState(false);
 
     useEffect(() => {
         loadOrders();
@@ -827,7 +825,10 @@ export default function BillingPage() {
                                 {/* Download Bill Button - shows when paid */}
                                 {(selectedOrder.billing?.status === "paid" || selectedOrder.billing?.status === "delivered") && (
                                     <button
-                                        onClick={() => setShowPrintModal(true)}
+                                        onClick={() => {
+                                            const billData = createBillDataFromOrder(selectedOrder);
+                                            generateBillPDF(billData);
+                                        }}
                                         className="flex-1 btn bg-purple-600 text-white hover:bg-purple-700"
                                     >
                                         <Download className="w-5 h-5 mr-2" />
@@ -840,42 +841,7 @@ export default function BillingPage() {
                 </div>
             </div>
 
-            {/* Print Bill Modal */}
-            {showPrintModal && selectedOrder && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 no-print">
-                    <div className="bg-white rounded-xl max-w-3xl w-full max-h-[95vh] overflow-auto">
-                        <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between no-print">
-                            <h3 className="text-lg font-semibold text-gray-900">Bill Preview</h3>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => window.print()}
-                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Print / Save PDF
-                                </button>
-                                <button
-                                    onClick={() => setShowPrintModal(false)}
-                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                        <BillTemplate
-                            customerName={selectedOrder.customerName}
-                            customerPhone={selectedOrder.customerPhone}
-                            customerAddress={selectedOrder.customerAddress || ""}
-                            billDate={selectedOrder.billing?.paidAt?.toDate().toLocaleDateString() || selectedOrder.billing?.billedAt?.toDate().toLocaleDateString() || new Date().toLocaleDateString()}
-                            orderId={selectedOrder.orderId}
-                            items={selectedOrder.billing?.lineItems || []}
-                            grandTotal={selectedOrder.billing?.finalAmount || selectedOrder.billing?.totalAmount || 0}
-                            paidAmount={(selectedOrder.billing?.advancePaid || 0) + (selectedOrder.billing?.amountReceived || 0)}
-                            balanceAmount={selectedOrder.billing?.balance || 0}
-                        />
-                    </div>
-                </div>
-            )}
+
         </ProtectedRoute>
     );
 }

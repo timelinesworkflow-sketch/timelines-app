@@ -13,8 +13,8 @@ const GARMENT_LABELS: Record<GarmentType, string> = {
     chudi: "Chudi / Salwar Top",
     frock: "Frock",
     pavadai_sattai: "Pavadai Sattai",
-    re_blouse: "RE Blouse",
-    re_pavada_sattai: "RE Pavada Sattai",
+    aari_blouse: "Aari Blouse",
+    aari_pavada_sattai: "Aari Pavada Sattai",
     other: "Other",
 };
 
