@@ -33,6 +33,9 @@ export interface BillData {
     totalAmount: number;
     paidAmount: number;
     balanceAmount: number;
+
+    // Payment Status (auto-derived from balance)
+    paymentStatus: "PAYMENT COMPLETED" | "PAYMENT PENDING";
 }
 
 // Default business details
@@ -86,7 +89,8 @@ export function createEmptyBillData(): BillData {
         items: [],
         totalAmount: 0,
         paidAmount: 0,
-        balanceAmount: 0
+        balanceAmount: 0,
+        paymentStatus: "PAYMENT PENDING"
     };
 }
 
@@ -96,6 +100,8 @@ export function createEmptyBillData(): BillData {
  */
 export function normalizeBillData(data: Partial<BillData>): BillData {
     const empty = createEmptyBillData();
+    const balanceAmount = data.balanceAmount || 0;
+
     return {
         businessName: data.businessName || empty.businessName,
         subtitle: data.subtitle || empty.subtitle,
@@ -114,6 +120,8 @@ export function normalizeBillData(data: Partial<BillData>): BillData {
         })),
         totalAmount: data.totalAmount || 0,
         paidAmount: data.paidAmount || 0,
-        balanceAmount: data.balanceAmount || 0
+        balanceAmount,
+        // Auto-derive payment status from balance
+        paymentStatus: balanceAmount === 0 ? "PAYMENT COMPLETED" : "PAYMENT PENDING"
     };
 }

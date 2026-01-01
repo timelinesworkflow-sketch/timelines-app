@@ -16,6 +16,15 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const BLACK = "#000000";
 const GRAY = "#666666";
 const LIGHT_GRAY = "#EEEEEE";
+const GREEN = "#008000";
+const ORANGE = "#FF8C00";
+
+/**
+ * Format currency in Indian locale
+ */
+function formatCurrency(amount: number): string {
+    return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
 
 /**
  * Generate and download bill PDF
@@ -178,14 +187,14 @@ export async function generateBillPDF(billData: BillData): Promise<void> {
 
         // Price
         if (item && item.price > 0) {
-            doc.text(`₹${item.price.toFixed(0)}`, colX + 2, y + 5.5);
+            doc.text(formatCurrency(item.price), colX + 2, y + 5.5);
         }
         colX += colWidths[3];
         doc.line(colX, y, colX, y + rowHeight);
 
         // Total
         if (item && item.total > 0) {
-            doc.text(`₹${item.total.toFixed(0)}`, colX + 2, y + 5.5);
+            doc.text(formatCurrency(item.total), colX + 2, y + 5.5);
         }
 
         y += rowHeight;
@@ -201,26 +210,39 @@ export async function generateBillPDF(billData: BillData): Promise<void> {
     doc.setFontSize(10);
 
     // Total Amount
+    doc.setTextColor(BLACK);
     doc.text("Total Amount:", summaryX, y);
-    doc.text(`₹${billData.totalAmount.toFixed(2)}`, summaryValueX, y, { align: "right" });
+    doc.text(formatCurrency(billData.totalAmount), summaryValueX, y, { align: "right" });
     y += 7;
 
     // Paid Amount
-    doc.setTextColor("#008000"); // Green
+    doc.setTextColor(GREEN);
     doc.text("Paid Amount:", summaryX, y);
-    doc.text(`₹${billData.paidAmount.toFixed(2)}`, summaryValueX, y, { align: "right" });
+    doc.text(formatCurrency(billData.paidAmount), summaryValueX, y, { align: "right" });
     y += 7;
 
     // Balance
-    doc.setTextColor(billData.balanceAmount > 0 ? "#CC0000" : "#008000"); // Red if balance, green if 0
+    doc.setTextColor(billData.balanceAmount > 0 ? "#CC0000" : GREEN);
     doc.text("Balance:", summaryX, y);
-    doc.text(`₹${billData.balanceAmount.toFixed(2)}`, summaryValueX, y, { align: "right" });
+    doc.text(formatCurrency(billData.balanceAmount), summaryValueX, y, { align: "right" });
     y += 5;
 
     // Divider
     doc.setTextColor(BLACK);
     doc.setLineWidth(0.3);
     doc.line(summaryX, y, summaryValueX, y);
+    y += 8;
+
+    // Payment Status Box
+    const statusText = billData.paymentStatus || (billData.balanceAmount === 0 ? "PAYMENT COMPLETED" : "PAYMENT PENDING");
+    const statusColor = statusText === "PAYMENT COMPLETED" ? GREEN : ORANGE;
+
+    doc.setFillColor(statusColor);
+    doc.roundedRect(summaryX, y, 80, 10, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    doc.text(statusText, summaryX + 40, y + 7, { align: "center" });
 
     // ========== SIGNATURE SECTION ==========
     y = PAGE_HEIGHT - MARGIN - 40;
@@ -287,6 +309,8 @@ export function createBillDataFromOrder(order: {
         billDate = billing.billedAt.toDate().toLocaleDateString("en-IN");
     }
 
+    const balanceAmount = billing.balance || 0;
+
     return {
         businessName: BUSINESS_NAME,
         subtitle: BUSINESS_SUBTITLE,
@@ -305,6 +329,8 @@ export function createBillDataFromOrder(order: {
         })),
         totalAmount: billing.finalAmount || billing.totalAmount || 0,
         paidAmount,
-        balanceAmount: billing.balance || 0
+        balanceAmount,
+        // Auto-derive payment status from balance
+        paymentStatus: balanceAmount === 0 ? "PAYMENT COMPLETED" : "PAYMENT PENDING"
     };
 }
