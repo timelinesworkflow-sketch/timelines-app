@@ -58,6 +58,7 @@ export default function ProtectedRoute({
                     ironing: "/ironing",
                     billing: "/billing",
                     delivery: "/delivery",
+                    accountant: "/accounts",
                 };
 
                 router.replace(roleRoutes[userData.role] || "/");

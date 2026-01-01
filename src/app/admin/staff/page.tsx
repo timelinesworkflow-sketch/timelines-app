@@ -485,6 +485,7 @@ export default function AdminStaffPage() {
                                         <option value="ironing">Ironing</option>
                                         <option value="billing">Billing</option>
                                         <option value="delivery">Delivery</option>
+                                        <option value="accountant">Accountant</option>
                                     </select>
                                 </div>
 

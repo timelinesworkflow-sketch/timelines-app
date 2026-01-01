@@ -24,6 +24,7 @@ const ROLE_ROUTES: Record<string, string> = {
     ironing: "/ironing",
     billing: "/billing",
     delivery: "/delivery",
+    accountant: "/accounts",
 };
 
 // Role display names
@@ -42,6 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
     ironing: "Ironing",
     billing: "Billing",
     delivery: "Delivery",
+    accountant: "Accounts",
 };
 
 export default function TopBar() {
@@ -93,8 +95,8 @@ export default function TopBar() {
                         {/* User Info */}
                         <div className="flex items-center space-x-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isImpersonating
-                                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                                    : "bg-gradient-to-r from-indigo-600 to-purple-600"
+                                ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                                : "bg-gradient-to-r from-indigo-600 to-purple-600"
                                 }`}>
                                 {isImpersonating ? <UserCog className="w-5 h-5 text-white" /> : <User className="w-5 h-5 text-white" />}
                             </div>
@@ -154,8 +156,8 @@ export default function TopBar() {
                                     key={role}
                                     onClick={() => handleLoginAs(role as UserRole)}
                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${impersonatedRole === role
-                                            ? "bg-amber-600 text-white"
-                                            : "bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white"
+                                        ? "bg-amber-600 text-white"
+                                        : "bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white"
                                         }`}
                                 >
                                     {label}

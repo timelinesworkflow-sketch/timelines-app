@@ -16,7 +16,8 @@ export type UserRole =
     | "ironing"
     | "billing"
     | "delivery"
-    | "purchase";
+    | "purchase"
+    | "accountant";
 
 // Stage types that support sub-stages (parallel tasks)
 export type SubStageParentRole = "marking" | "cutting" | "stitching";
@@ -787,3 +788,55 @@ export const STAGE_DISPLAY_NAMES: Record<string, string> = {
     billing: "Billing",
     delivery: "Delivery",
 };
+
+// ============================================
+// ACCOUNTS MODULE - SALARY TRACKING
+// ============================================
+
+export type SalaryType = "daily" | "weekly" | "monthly";
+export type SalaryStatus = "pending" | "credited";
+
+export interface SalaryLog {
+    salaryLogId: string;
+    staffId: string;
+    staffName: string;
+    role: UserRole;
+    salaryType: SalaryType;
+    periodStart: Timestamp;
+    periodEnd: Timestamp;
+    totalWage: number;
+    advanceAmount: number;
+    netPaid: number;
+    creditedByRole: "accountant" | "admin";
+    creditedById: string;
+    creditedByName: string;
+    creditedAt: Timestamp;
+    status: SalaryStatus;
+    notes?: string;
+}
+
+export interface AdvanceLog {
+    advanceId: string;
+    staffId: string;
+    staffName: string;
+    amount: number;
+    date: Timestamp;
+    givenById: string;
+    givenByName: string;
+    givenByRole: "accountant" | "admin";
+    notes?: string;
+    createdAt: Timestamp;
+}
+
+export interface DailyWageLog {
+    wageLogId: string;
+    staffId: string;
+    staffName: string;
+    date: Timestamp;
+    ordersWorked: string[];  // Order IDs
+    wageAmount: number;
+    loggedById: string;
+    loggedByName: string;
+    loggedAt: Timestamp;
+    notes?: string;
+}

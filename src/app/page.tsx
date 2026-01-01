@@ -38,6 +38,7 @@ export default function LoginPage() {
             ironing: "/ironing",
             billing: "/billing",
             delivery: "/delivery",
+            accountant: "/accounts",
         };
 
         router.replace(roleRoutes[role] || "/");
