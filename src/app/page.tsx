@@ -31,6 +31,7 @@ export default function LoginPage() {
             marking_checker: "/marking-check",
             cutting: "/cutting",
             cutting_checker: "/cutting-check",
+            aari: "/aari",
             stitching: "/stitching",
             stitching_checker: "/stitching-check",
             hooks: "/hooks",
