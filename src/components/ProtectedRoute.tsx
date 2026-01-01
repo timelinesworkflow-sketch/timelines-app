@@ -16,7 +16,7 @@ export default function ProtectedRoute({
     allowedRoles,
     redirectTo = "/",
 }: ProtectedRouteProps) {
-    const { user, userData, loading } = useAuth();
+    const { user, userData, loading, effectiveRole, isImpersonating } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -31,8 +31,15 @@ export default function ProtectedRoute({
                 return;
             }
 
-            // Check if user's role is allowed
-            if (!allowedRoles.includes(userData.role)) {
+            // Admin with impersonation can access any page
+            if (userData.role === "admin" && isImpersonating) {
+                // Allow access - admin is impersonating
+                return;
+            }
+
+            // Check if user's effective role is allowed
+            const roleToCheck = effectiveRole || userData.role;
+            if (!allowedRoles.includes(roleToCheck)) {
                 // Redirect to their own main page
                 const roleRoutes: Record<string, string> = {
                     admin: "/admin",
@@ -56,7 +63,7 @@ export default function ProtectedRoute({
                 router.replace(roleRoutes[userData.role] || "/");
             }
         }
-    }, [user, userData, loading, allowedRoles, router]);
+    }, [user, userData, loading, allowedRoles, router, effectiveRole, isImpersonating]);
 
     if (loading) {
         return (
@@ -70,7 +77,14 @@ export default function ProtectedRoute({
         return null;
     }
 
-    if (!allowedRoles.includes(userData.role)) {
+    // Admin with impersonation can access any page
+    if (userData.role === "admin" && isImpersonating) {
+        return <>{children}</>;
+    }
+
+    // Check effective role for access
+    const roleToCheck = effectiveRole || userData.role;
+    if (!allowedRoles.includes(roleToCheck)) {
         return (
             <div className="min-h-screen flex items-center justify-center text-red-600">
                 Access denied

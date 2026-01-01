@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
     signInWithEmailAndPassword,
@@ -9,7 +9,7 @@ import {
     User as FirebaseUser,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { User } from "@/types";
+import { User, UserRole } from "@/types";
 
 interface AuthContextType {
     user: FirebaseUser | null;
@@ -17,6 +17,11 @@ interface AuthContextType {
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
     signOut: () => Promise<void>;
+    // Admin impersonation feature
+    impersonatedRole: UserRole | null;
+    setImpersonatedRole: (role: UserRole | null) => void;
+    effectiveRole: UserRole | null;
+    isImpersonating: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,6 +30,10 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     signIn: async () => ({ success: false }),
     signOut: async () => { },
+    impersonatedRole: null,
+    setImpersonatedRole: () => { },
+    effectiveRole: null,
+    isImpersonating: false,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -33,6 +42,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<FirebaseUser | null>(null);
     const [userData, setUserData] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [impersonatedRole, setImpersonatedRole] = useState<UserRole | null>(null);
+
+    // Compute effective role: impersonated role if set, otherwise actual user role
+    const effectiveRole = useMemo(() => {
+        if (impersonatedRole) return impersonatedRole;
+        return userData?.role || null;
+    }, [impersonatedRole, userData?.role]);
+
+    // Check if currently impersonating
+    const isImpersonating = useMemo(() => {
+        return impersonatedRole !== null && userData?.role === "admin";
+    }, [impersonatedRole, userData?.role]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -49,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             } else {
                 setUserData(null);
+                setImpersonatedRole(null); // Clear impersonation on logout
             }
 
             setLoading(false);
@@ -83,13 +105,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const signOut = async () => {
+        setImpersonatedRole(null); // Clear impersonation first
         await firebaseSignOut(auth);
         setUser(null);
         setUserData(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, userData, loading, signIn, signOut }}>
+        <AuthContext.Provider value={{
+            user,
+            userData,
+            loading,
+            signIn,
+            signOut,
+            impersonatedRole,
+            setImpersonatedRole,
+            effectiveRole,
+            isImpersonating,
+        }}>
             {children}
         </AuthContext.Provider>
     );
