@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
     title: "Timelines Workflow System",
     description: "Internal tailoring shop workflow management system",
+    icons: {
+        icon: "/icon.png",
+    },
 };
 
 export default function RootLayout({
