@@ -13,16 +13,22 @@ import {
     addDoc,
 } from "firebase/firestore";
 import { Order, TimelineEntry, StaffWorkLog } from "@/types";
+import { sanitizeForFirestore, ensureOrderDefaults } from "@/lib/firestoreSanitize";
 
 /**
  * Create a new order in Firestore
+ * Sanitizes data to ensure no undefined values
  */
 export async function createOrder(orderData: Partial<Order>): Promise<string> {
     const ordersRef = collection(db, "orders");
-    const orderDoc = await addDoc(ordersRef, {
+
+    // Sanitize data before writing
+    const sanitizedData = sanitizeForFirestore({
         ...orderData,
         createdAt: Timestamp.now(),
     });
+
+    const orderDoc = await addDoc(ordersRef, sanitizedData);
 
     // Update with the generated ID
     await updateDoc(orderDoc, { orderId: orderDoc.id });
@@ -32,22 +38,29 @@ export async function createOrder(orderData: Partial<Order>): Promise<string> {
 
 /**
  * Get an order by ID
+ * Ensures all required fields have safe defaults
  */
 export async function getOrder(orderId: string): Promise<Order | null> {
     const orderDoc = await getDoc(doc(db, "orders", orderId));
     if (!orderDoc.exists()) return null;
-    return orderDoc.data() as Order;
+
+    // Ensure order has all required fields with safe defaults
+    return ensureOrderDefaults(orderDoc.data()) as Order;
 }
 
 /**
  * Update an order
+ * Sanitizes updates to ensure no undefined values
  */
 export async function updateOrder(orderId: string, updates: Partial<Order>): Promise<void> {
-    await updateDoc(doc(db, "orders", orderId), updates);
+    // Sanitize updates before writing
+    const sanitizedUpdates = sanitizeForFirestore(updates as Record<string, unknown>);
+    await updateDoc(doc(db, "orders", orderId), sanitizedUpdates);
 }
 
 /**
  * Get orders for a specific stage and staff
+ * Ensures all orders have required fields with safe defaults
  */
 export async function getOrdersForStage(
     stage: string,
@@ -63,7 +76,11 @@ export async function getOrdersForStage(
     );
 
     const snapshot = await getDocs(q);
-    const orders = snapshot.docs.map((doc) => doc.data() as Order);
+
+    // Ensure all orders have required fields with safe defaults
+    const orders = snapshot.docs.map((doc) =>
+        ensureOrderDefaults(doc.data()) as Order
+    );
 
     // Filter by assigned staff if provided
     if (staffId) {

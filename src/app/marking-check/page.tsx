@@ -430,22 +430,24 @@ export default function MarkingCheckPage() {
                                                                 </span>
                                                             </div>
 
-                                                            {/* Assignment */}
-                                                            <div className="mb-3">
-                                                                <select
-                                                                    value={task.assignedStaffId || ""}
-                                                                    onChange={(e) => handleAssignTask(task.taskId, e.target.value, orderId)}
-                                                                    disabled={actionLoading === task.taskId}
-                                                                    className="w-full text-xs px-2 py-1.5 border border-slate-600 rounded bg-slate-700 text-gray-200"
-                                                                >
-                                                                    <option value="">Unassigned</option>
-                                                                    {staffList.map((s) => (
-                                                                        <option key={s.staffId} value={s.staffId}>
-                                                                            {s.name}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
+                                                            {/* Assignment - Only visible to Admin/Supervisor, NOT Checker */}
+                                                            {(userData?.role === "admin" || userData?.role === "supervisor") && (
+                                                                <div className="mb-3">
+                                                                    <select
+                                                                        value={task.assignedStaffId || ""}
+                                                                        onChange={(e) => handleAssignTask(task.taskId, e.target.value, orderId)}
+                                                                        disabled={actionLoading === task.taskId}
+                                                                        className="w-full text-xs px-2 py-1.5 border border-slate-600 rounded bg-slate-700 text-gray-200"
+                                                                    >
+                                                                        <option value="">Unassigned</option>
+                                                                        {staffList.map((s) => (
+                                                                            <option key={s.staffId} value={s.staffId}>
+                                                                                {s.name}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            )}
 
                                                             {/* Approve/Reject Actions */}
                                                             {canApprove && (
