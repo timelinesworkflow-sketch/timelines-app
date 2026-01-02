@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,7 +23,8 @@ import {
     Download
 } from "lucide-react";
 import Toast from "@/components/Toast";
-import { generateBillPDF, createBillDataFromOrder } from "@/billing/generateBillPDF";
+import BillTemplate from "@/components/billing/BillTemplate";
+import html2pdf from "html2pdf.js";
 
 type TabType = "create" | "pending" | "paid" | "delivered";
 
@@ -68,6 +69,11 @@ export default function BillingPage() {
 
     // Show/hide line items section
     const [showLineItems, setShowLineItems] = useState(true);
+
+    // Bill template ref for PDF generation
+    const billTemplateRef = useRef<HTMLDivElement>(null);
+    const [showBillPreview, setShowBillPreview] = useState(false);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
 
 
     useEffect(() => {
@@ -825,14 +831,12 @@ export default function BillingPage() {
                                 {/* Download Bill Button - shows when paid */}
                                 {(selectedOrder.billing?.status === "paid" || selectedOrder.billing?.status === "delivered") && (
                                     <button
-                                        onClick={() => {
-                                            const billData = createBillDataFromOrder(selectedOrder);
-                                            generateBillPDF(billData);
-                                        }}
-                                        className="flex-1 btn bg-purple-600 text-white hover:bg-purple-700"
+                                        onClick={() => setShowBillPreview(true)}
+                                        disabled={generatingPdf}
+                                        className="flex-1 btn bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
                                     >
                                         <Download className="w-5 h-5 mr-2" />
-                                        Download Bill
+                                        {generatingPdf ? "Generating..." : "Download Bill"}
                                     </button>
                                 )}
                             </div>
@@ -841,6 +845,70 @@ export default function BillingPage() {
                 </div>
             </div>
 
+            {/* Hidden Bill Template for PDF Generation */}
+            {showBillPreview && selectedOrder && (
+                <div className="fixed inset-0 bg-black/80 z-50 overflow-auto">
+                    <div className="min-h-screen flex flex-col items-center py-8">
+                        {/* Close and Download buttons */}
+                        <div className="flex gap-4 mb-4">
+                            <button
+                                onClick={() => setShowBillPreview(false)}
+                                className="btn bg-slate-600 text-white hover:bg-slate-700"
+                            >
+                                <X className="w-5 h-5 mr-2" />
+                                Close
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!billTemplateRef.current) return;
+                                    setGeneratingPdf(true);
+                                    try {
+                                        const opt = {
+                                            margin: 0,
+                                            filename: `TIMELINES_BILL_${selectedOrder.billing?.billNumber || selectedOrder.orderId.slice(-8)}.pdf`,
+                                            image: { type: 'jpeg' as const, quality: 0.98 },
+                                            html2canvas: { scale: 2, useCORS: true },
+                                            jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+                                        };
+                                        await html2pdf().set(opt).from(billTemplateRef.current).save();
+                                        setToast({ message: "Bill downloaded successfully!", type: "success" });
+                                    } catch (error) {
+                                        console.error("PDF generation failed:", error);
+                                        setToast({ message: "Failed to download bill", type: "error" });
+                                    } finally {
+                                        setGeneratingPdf(false);
+                                    }
+                                }}
+                                disabled={generatingPdf}
+                                className="btn bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                                <Download className="w-5 h-5 mr-2" />
+                                {generatingPdf ? "Generating PDF..." : "Download PDF"}
+                            </button>
+                        </div>
+
+                        {/* Bill Template */}
+                        <BillTemplate
+                            ref={billTemplateRef}
+                            customerName={selectedOrder.customerName}
+                            customerPhone={selectedOrder.customerPhone}
+                            customerAddress={selectedOrder.customerAddress || ""}
+                            billNumber={selectedOrder.billing?.billNumber || selectedOrder.orderId.slice(-8).toUpperCase()}
+                            billDate={selectedOrder.billing?.paidAt?.toDate?.()?.toLocaleDateString("en-IN") || new Date().toLocaleDateString("en-IN")}
+                            items={(selectedOrder.billing?.lineItems || []).map((item, i) => ({
+                                sno: item.sno || i + 1,
+                                particular: item.particular,
+                                qty: item.qty,
+                                price: item.price,
+                                total: item.total
+                            }))}
+                            totalAmount={selectedOrder.billing?.finalAmount || selectedOrder.billing?.totalAmount || 0}
+                            paidAmount={(selectedOrder.billing?.advancePaid || 0) + (selectedOrder.billing?.amountReceived || 0)}
+                            balanceAmount={Math.max(selectedOrder.billing?.balance || 0, 0)}
+                        />
+                    </div>
+                </div>
+            )}
 
         </ProtectedRoute>
     );
