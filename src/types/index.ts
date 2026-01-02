@@ -840,3 +840,60 @@ export interface DailyWageLog {
     loggedAt: Timestamp;
     notes?: string;
 }
+
+// ============================================
+// SALARY LEDGER (ENTERPRISE ACCOUNTS MODULE)
+// ============================================
+
+export type StaffSalaryRole =
+    | "stitching"
+    | "stitching_checker"
+    | "aari"
+    | "monthly";
+
+export type PaymentStatus = "pending" | "partially_paid" | "paid";
+
+export interface WorkSummary {
+    totalOrders: number;
+    stagesWorked: string[];
+    fromDate: Timestamp;
+    toDate: Timestamp;
+}
+
+export interface SalaryLedger {
+    ledgerId: string;
+
+    staffId: string;
+    staffName: string;
+    staffRole: StaffSalaryRole;
+
+    salaryType: SalaryType;
+
+    workSummary: WorkSummary;
+
+    grossAmount: number;
+    advanceAmount: number;      // Deducted from gross
+    netPayable: number;         // grossAmount - advanceAmount
+    paidAmount: number;
+
+    paymentStatus: PaymentStatus;
+
+    paymentDate?: Timestamp;
+
+    creditedByRole: "accountant" | "admin";
+    creditedById: string;
+    creditedByName: string;
+
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+
+    notes?: string;
+}
+
+// Helper to calculate payment status
+export function calculatePaymentStatus(netPayable: number, paidAmount: number): PaymentStatus {
+    const balance = netPayable - paidAmount;
+    if (balance <= 0) return "paid";
+    if (paidAmount > 0) return "partially_paid";
+    return "pending";
+}
