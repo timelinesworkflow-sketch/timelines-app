@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order, OrderItem, MEASUREMENT_LABELS } from "@/types";
+import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import { canViewCustomerInfo, getCustomerDisplayName } from "@/lib/privacy";
 import { formatOrderProgress, ITEM_STAGES } from "@/lib/orderItems";
@@ -300,22 +300,25 @@ export default function StagePageContent({
                             Reference Images
                         </p>
                         <div className="flex space-x-2 overflow-x-auto">
-                            {currentOrder.samplerImages.map((url, idx) => (
-                                <div
-                                    key={idx}
-                                    className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden cursor-pointer hover:opacity-75 transition-opacity"
-                                    onClick={() => setShowImageModal(url)}
-                                >
-                                    <img
-                                        src={url}
-                                        alt={`Reference ${idx + 1}`}
-                                        className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                        <Eye className="w-5 h-5 text-white" />
+                            {currentOrder.samplerImages.map((url, idx) => {
+                                const imageUrl = getSamplerImageUrl(url);
+                                return (
+                                    <div
+                                        key={idx}
+                                        className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden cursor-pointer hover:opacity-75 transition-opacity"
+                                        onClick={() => setShowImageModal(imageUrl)}
+                                    >
+                                        <img
+                                            src={imageUrl}
+                                            alt={`Reference ${idx + 1}`}
+                                            className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                            <Eye className="w-5 h-5 text-white" />
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -370,9 +373,9 @@ export default function StagePageContent({
                                         </div>
                                         <div className="flex items-center space-x-2">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${item.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
-                                                    item.status === 'ready' ? 'bg-green-100 text-green-700' :
-                                                        item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
-                                                            'bg-yellow-100 text-yellow-700'
+                                                item.status === 'ready' ? 'bg-green-100 text-green-700' :
+                                                    item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
+                                                        'bg-yellow-100 text-yellow-700'
                                                 }`}>
                                                 {item.status}
                                             </span>

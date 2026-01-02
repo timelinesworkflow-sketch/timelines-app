@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Order, PlannedMaterial, PlannedMaterialWithStatus, MaterialUsage, InventoryItem } from "@/types";
+import { Order, PlannedMaterial, PlannedMaterialWithStatus, MaterialUsage, InventoryItem, getSamplerImageUrl } from "@/types";
 import { MEASUREMENT_LABELS } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import {
@@ -1029,7 +1029,7 @@ export default function MaterialsPage() {
                                                 {currentOrder.samplerImages.map((img, idx) => (
                                                     <img
                                                         key={idx}
-                                                        src={img}
+                                                        src={getSamplerImageUrl(img)}
                                                         alt={`Reference ${idx + 1}`}
                                                         className="w-full h-24 object-cover rounded-lg border"
                                                     />

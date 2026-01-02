@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
-import { Order } from "@/types";
+import { Order, getSamplerImageUrl } from "@/types";
 import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
 import { Timestamp } from "firebase/firestore";
 import {
@@ -261,7 +261,7 @@ export default function AariPage() {
                                             {currentOrder.samplerImages.map((img, idx) => (
                                                 <img
                                                     key={idx}
-                                                    src={img}
+                                                    src={getSamplerImageUrl(img)}
                                                     alt={`Reference ${idx + 1}`}
                                                     className="w-24 h-24 object-cover rounded-lg border-2 border-gray-200 dark:border-slate-600"
                                                 />

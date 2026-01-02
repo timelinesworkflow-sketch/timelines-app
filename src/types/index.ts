@@ -510,6 +510,39 @@ export interface OrderItem {
 // Overall order status based on item completion
 export type OverallOrderStatus = "inProgress" | "partial" | "completed" | "delivered";
 
+// ============================================
+// INSTRUCTION IMAGES (for visual design instructions)
+// ============================================
+
+export interface InstructionImage {
+    instructionId: string;
+    imageUrl: string;
+    note?: string;
+    createdAt: Timestamp;
+}
+
+export interface SamplerImageObject {
+    imageId: string;
+    imageUrl: string;
+    note?: string;
+    instructionImages?: InstructionImage[];
+}
+
+// SamplerImageItem can be either a string (old format) or object (new format)
+// This maintains backward compatibility with existing orders
+export type SamplerImageItem = string | SamplerImageObject;
+
+// Helper to check if samplerImage is the new object format
+export function isSamplerImageObject(item: SamplerImageItem): item is SamplerImageObject {
+    return typeof item === "object" && item !== null && "imageUrl" in item;
+}
+
+// Helper to get image URL from either format
+export function getSamplerImageUrl(item: SamplerImageItem): string {
+    if (typeof item === "string") return item;
+    return item.imageUrl;
+}
+
 export interface Order {
     orderId: string;
     customerId: string;
@@ -521,7 +554,8 @@ export interface Order {
     dueDate: Timestamp;
     createdAt: Timestamp;
     confirmedAt: Timestamp | null;
-    samplerImages: string[];
+    // samplerImages supports both old string[] and new object format for backward compatibility
+    samplerImages: SamplerImageItem[];
     finalProductImages: string[];
     activeStages: string[];
     currentStage: string;
