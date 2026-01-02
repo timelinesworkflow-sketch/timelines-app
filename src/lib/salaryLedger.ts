@@ -198,30 +198,17 @@ export async function getStaffWorkSummary(
 }
 
 // ============================================
-// STAFF LIST (from users collection)
+// STAFF LIST (re-exported from users.ts for backward compatibility)
 // ============================================
 
-export async function getStaffByRoles(roles: string[]): Promise<User[]> {
-    const usersRef = collection(db, "users");
-    const snapshot = await getDocs(usersRef);
-
-    return snapshot.docs
-        .map(doc => doc.data() as User)
-        // isActive may be undefined for older users - treat undefined as active
-        .filter(user => roles.includes(user.role) && user.isActive !== false);
-}
-
-export async function getStitchingStaff(): Promise<User[]> {
-    return getStaffByRoles(["stitching", "stitching_checker"]);
-}
-
-export async function getAariStaff(): Promise<User[]> {
-    return getStaffByRoles(["aari"]);
-}
-
-export async function getMonthlyStaff(): Promise<User[]> {
-    return getStaffByRoles(["supervisor", "intake", "materials", "purchase", "billing", "delivery", "accountant", "marking", "marking_checker", "cutting", "cutting_checker", "hooks", "ironing"]);
-}
+// Re-export staff functions from users.ts (single source of truth)
+export {
+    getStaffByRoles,
+    getStitchingStaff,
+    getAariStaff,
+    getMonthlyStaff,
+    getAllActiveStaff,
+} from "@/lib/users";
 
 // ============================================
 // STAFF SALARY SUMMARY
