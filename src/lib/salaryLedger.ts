@@ -185,7 +185,8 @@ export async function getStaffByRoles(roles: string[]): Promise<User[]> {
 
     return snapshot.docs
         .map(doc => doc.data() as User)
-        .filter(user => roles.includes(user.role) && user.isActive);
+        // isActive may be undefined for older users - treat undefined as active
+        .filter(user => roles.includes(user.role) && user.isActive !== false);
 }
 
 export async function getStitchingStaff(): Promise<User[]> {
