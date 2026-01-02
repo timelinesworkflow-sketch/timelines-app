@@ -33,25 +33,34 @@ import {
 // ============================================
 
 export async function getSalaryLedgerEntries(staffId?: string): Promise<SalaryLedger[]> {
-    let q;
-    if (staffId) {
-        q = query(
-            collection(db, "salaryLedger"),
-            where("staffId", "==", staffId),
-            orderBy("createdAt", "desc")
-        );
-    } else {
-        q = query(
-            collection(db, "salaryLedger"),
-            orderBy("createdAt", "desc")
-        );
-    }
+    try {
+        let q;
+        if (staffId) {
+            // Simple query without orderBy to avoid index requirement
+            q = query(
+                collection(db, "salaryLedger"),
+                where("staffId", "==", staffId)
+            );
+        } else {
+            q = query(collection(db, "salaryLedger"));
+        }
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-        ...doc.data(),
-        ledgerId: doc.id,
-    })) as SalaryLedger[];
+        const snapshot = await getDocs(q);
+        const entries = snapshot.docs.map(doc => ({
+            ...doc.data(),
+            ledgerId: doc.id,
+        })) as SalaryLedger[];
+
+        // Sort client-side (descending by createdAt)
+        return entries.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime;
+        });
+    } catch (error) {
+        console.error("Error fetching salary ledger entries:", error);
+        return [];
+    }
 }
 
 export async function createSalaryLedgerEntry(params: {
@@ -131,30 +140,43 @@ export async function getStaffWorkLogs(
     fromDate?: Date,
     toDate?: Date
 ): Promise<StaffWorkLog[]> {
-    let q = query(
-        collection(db, "staffWorkLogs"),
-        where("staffId", "==", staffId),
-        orderBy("timestamp", "desc")
-    );
+    try {
+        // Simple query without orderBy to avoid index requirement
+        const q = query(
+            collection(db, "staffWorkLogs"),
+            where("staffId", "==", staffId)
+        );
 
-    const snapshot = await getDocs(q);
-    let logs: StaffWorkLog[] = snapshot.docs.map(docSnap => {
-        const data = docSnap.data();
-        return {
-            ...data,
-            logId: docSnap.id,
-        } as unknown as StaffWorkLog;
-    });
-
-    // Filter by date range if provided
-    if (fromDate && toDate) {
-        logs = logs.filter(log => {
-            const logDate = log.timestamp.toDate();
-            return logDate >= fromDate && logDate <= toDate;
+        const snapshot = await getDocs(q);
+        let logs: StaffWorkLog[] = snapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return {
+                ...data,
+                logId: docSnap.id,
+            } as unknown as StaffWorkLog;
         });
-    }
 
-    return logs;
+        // Sort client-side (descending by timestamp)
+        logs.sort((a, b) => {
+            const aTime = a.timestamp?.toMillis() || 0;
+            const bTime = b.timestamp?.toMillis() || 0;
+            return bTime - aTime;
+        });
+
+        // Filter by date range if provided
+        if (fromDate && toDate) {
+            logs = logs.filter(log => {
+                const logDate = log.timestamp?.toDate();
+                if (!logDate) return false;
+                return logDate >= fromDate && logDate <= toDate;
+            });
+        }
+
+        return logs;
+    } catch (error) {
+        console.error("Error fetching staff work logs:", error);
+        return [];
+    }
 }
 
 export async function getStaffWorkSummary(
