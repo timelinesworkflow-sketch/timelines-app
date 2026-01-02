@@ -80,7 +80,8 @@ export async function createSalaryLedgerEntry(params: {
     const netPayable = params.grossAmount - params.advanceAmount;
     const paymentStatus = calculatePaymentStatus(netPayable, params.paidAmount);
 
-    const entry: Omit<SalaryLedger, "ledgerId"> = {
+    // Build entry without undefined fields (Firestore rejects undefined)
+    const entry: Omit<SalaryLedger, "ledgerId"> & { paymentDate?: any } = {
         staffId: params.staffId,
         staffName: params.staffName,
         staffRole: params.staffRole,
@@ -91,7 +92,6 @@ export async function createSalaryLedgerEntry(params: {
         netPayable,
         paidAmount: params.paidAmount,
         paymentStatus,
-        paymentDate: params.paidAmount > 0 ? Timestamp.now() : undefined,
         creditedByRole: params.creditedByRole,
         creditedById: params.creditedById,
         creditedByName: params.creditedByName,
@@ -99,6 +99,11 @@ export async function createSalaryLedgerEntry(params: {
         updatedAt: Timestamp.now(),
         notes: params.notes || "",
     };
+
+    // Only add paymentDate if paid (avoid undefined in Firestore)
+    if (params.paidAmount > 0) {
+        entry.paymentDate = Timestamp.now();
+    }
 
     const docRef = await addDoc(collection(db, "salaryLedger"), entry);
     return docRef.id;
@@ -228,32 +233,48 @@ export async function getStaffSalarySummaries(staff: User[]): Promise<StaffSalar
     const summaries: StaffSalarySummary[] = [];
 
     for (const user of staff) {
-        // Get latest salary ledger entry
-        const ledgerEntries = await getSalaryLedgerEntries(user.staffId);
-        const latestEntry = ledgerEntries[0];
+        // Wrap each staff in try/catch - one bad staff shouldn't crash all
+        try {
+            // Get latest salary ledger entry
+            const ledgerEntries = await getSalaryLedgerEntries(user.staffId);
+            const latestEntry = ledgerEntries[0];
 
-        // Get work logs for this week
-        const now = new Date();
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay() + 1);
-        weekStart.setHours(0, 0, 0, 0);
+            // Get work logs for this week
+            const now = new Date();
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay() + 1);
+            weekStart.setHours(0, 0, 0, 0);
 
-        const workLogs = await getStaffWorkLogs(user.staffId, weekStart, now);
-        const orderIds = [...new Set(workLogs.map(log => log.orderId))];
+            const workLogs = await getStaffWorkLogs(user.staffId, weekStart, now);
+            const orderIds = [...new Set(workLogs.map(log => log.orderId))];
 
-        // Calculate pending amount from ledger
-        const pendingEntries = ledgerEntries.filter(e => e.paymentStatus !== "paid");
-        const pendingAmount = pendingEntries.reduce((sum, e) => sum + (e.netPayable - e.paidAmount), 0);
+            // Calculate pending amount from ledger
+            const pendingAmount = ledgerEntries
+                .filter(e => e.paymentStatus !== "paid")
+                .reduce((sum, e) => sum + Math.max((e.netPayable - e.paidAmount), 0), 0);
 
-        summaries.push({
-            staffId: user.staffId,
-            staffName: user.name,
-            staffRole: user.role,
-            totalOrders: orderIds.length,
-            lastPaymentStatus: latestEntry?.paymentStatus || "none",
-            lastPaymentDate: latestEntry?.paymentDate?.toDate() || null,
-            pendingAmount: Math.max(pendingAmount, 0),
-        });
+            summaries.push({
+                staffId: user.staffId,
+                staffName: user.name,
+                staffRole: user.role,
+                totalOrders: orderIds.length,
+                lastPaymentStatus: latestEntry?.paymentStatus ?? "none",
+                lastPaymentDate: latestEntry?.paymentDate?.toDate() ?? null,
+                pendingAmount,
+            });
+        } catch (err) {
+            console.warn("Skipping staff due to error:", user.staffId, err);
+            // Still add staff with zero values so they appear in the list
+            summaries.push({
+                staffId: user.staffId,
+                staffName: user.name,
+                staffRole: user.role,
+                totalOrders: 0,
+                lastPaymentStatus: "none",
+                lastPaymentDate: null,
+                pendingAmount: 0,
+            });
+        }
     }
 
     return summaries;
@@ -285,9 +306,10 @@ export function getMonthDateRange(date: Date = new Date()): { start: Date; end: 
 
 export function mapRoleToSalaryRole(role: string): StaffSalaryRole {
     if (role === "stitching" || role === "stitching_checker") {
-        return role as StaffSalaryRole;
+        return "stitching";
     }
-    if (role === "aari") {
+    // Handle all AARI variants (aari, aari_worker, aari_staff, etc.)
+    if (role.startsWith("aari")) {
         return "aari";
     }
     return "monthly";
@@ -297,8 +319,9 @@ export function getSalaryTypeForRole(role: string): SalaryType {
     if (role === "stitching" || role === "stitching_checker") {
         return "weekly";
     }
-    if (role === "aari") {
-        return "weekly"; // Can be daily or weekly
+    // Handle all AARI variants
+    if (role.startsWith("aari")) {
+        return "weekly";
     }
     return "monthly";
 }
