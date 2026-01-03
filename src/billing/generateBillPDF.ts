@@ -3,7 +3,7 @@
  * Works on Android, iOS, and Desktop browsers
  */
 
-import { jsPDF } from "jspdf";
+// NOTE: jsPDF is dynamically imported to avoid "self is not defined" error during SSR/build
 import { BillData, BUSINESS_NAME, BUSINESS_SUBTITLE } from "./BillTemplate";
 
 // A4 dimensions in mm
@@ -32,6 +32,9 @@ function formatCurrency(amount: number): string {
  * @returns Promise that resolves when PDF is downloaded
  */
 export async function generateBillPDF(billData: BillData): Promise<void> {
+    // Dynamic import to avoid "self is not defined" during SSR/build
+    const { jsPDF } = await import("jspdf");
+
     const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
