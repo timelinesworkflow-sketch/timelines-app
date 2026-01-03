@@ -94,9 +94,24 @@ export default function AccountsPage() {
 
             setStaffList(staff);
 
-            // Get summaries for each staff
-            const summaries = await getStaffSalarySummaries(staff);
-            setStaffSummaries(summaries);
+            // Get summaries for each staff - don't fail if this throws
+            try {
+                const summaries = await getStaffSalarySummaries(staff);
+                setStaffSummaries(summaries);
+            } catch (summaryError) {
+                console.warn("Failed to load summaries, using defaults:", summaryError);
+                // Create default summaries so staff still appears in list
+                const defaultSummaries: StaffSalarySummary[] = staff.map(s => ({
+                    staffId: s.staffId,
+                    staffName: s.name,
+                    staffRole: s.role,
+                    totalOrders: 0,
+                    lastPaymentStatus: "none" as const,
+                    lastPaymentDate: null,
+                    pendingAmount: 0,
+                }));
+                setStaffSummaries(defaultSummaries);
+            }
         } catch (error) {
             console.error("Failed to load staff:", error);
             setToast({ message: "Failed to load staff data", type: "error" });
@@ -236,8 +251,8 @@ export default function AccountsPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                                        ? "bg-green-600 text-white"
-                                        : "bg-slate-700 text-gray-300 hover:bg-slate-600"
+                                    ? "bg-green-600 text-white"
+                                    : "bg-slate-700 text-gray-300 hover:bg-slate-600"
                                     }`}
                             >
                                 <tab.icon className="w-4 h-4" />
@@ -318,8 +333,8 @@ export default function AccountsPage() {
                                                 if (staff) handleSelectStaff(staff);
                                             }}
                                             className={`w-full text-left p-3 rounded-lg transition-all ${selectedStaff?.staffId === summary.staffId
-                                                    ? "bg-green-600 text-white"
-                                                    : "bg-slate-700 text-gray-300 hover:bg-slate-600"
+                                                ? "bg-green-600 text-white"
+                                                : "bg-slate-700 text-gray-300 hover:bg-slate-600"
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between">
