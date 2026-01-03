@@ -34,22 +34,18 @@ import {
 
 export async function getSalaryLedgerEntries(staffId?: string): Promise<SalaryLedger[]> {
     try {
-        let q;
-        if (staffId) {
-            // Simple query without orderBy to avoid index requirement
-            q = query(
-                collection(db, "salaryLedger"),
-                where("staffId", "==", staffId)
-            );
-        } else {
-            q = query(collection(db, "salaryLedger"));
-        }
+        // NO WHERE CLAUSE - fetch all, filter client-side to avoid index issues
+        const snapshot = await getDocs(collection(db, "salaryLedger"));
 
-        const snapshot = await getDocs(q);
-        const entries = snapshot.docs.map(doc => ({
+        let entries = snapshot.docs.map(doc => ({
             ...doc.data(),
             ledgerId: doc.id,
         })) as SalaryLedger[];
+
+        // Filter by staffId client-side
+        if (staffId) {
+            entries = entries.filter(e => e.staffId === staffId);
+        }
 
         // Sort client-side (descending by createdAt)
         return entries.sort((a, b) => {
@@ -146,13 +142,9 @@ export async function getStaffWorkLogs(
     toDate?: Date
 ): Promise<StaffWorkLog[]> {
     try {
-        // Simple query without orderBy to avoid index requirement
-        const q = query(
-            collection(db, "staffWorkLogs"),
-            where("staffId", "==", staffId)
-        );
+        // NO WHERE CLAUSE - fetch all, filter client-side to avoid index issues
+        const snapshot = await getDocs(collection(db, "staffWorkLogs"));
 
-        const snapshot = await getDocs(q);
         let logs: StaffWorkLog[] = snapshot.docs.map(docSnap => {
             const data = docSnap.data();
             return {
@@ -160,6 +152,9 @@ export async function getStaffWorkLogs(
                 logId: docSnap.id,
             } as unknown as StaffWorkLog;
         });
+
+        // Filter by staffId client-side
+        logs = logs.filter(log => log.staffId === staffId);
 
         // Sort client-side (descending by timestamp)
         logs.sort((a, b) => {

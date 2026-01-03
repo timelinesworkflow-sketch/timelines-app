@@ -23,25 +23,30 @@ import { SalaryLog, AdvanceLog, DailyWageLog, UserRole } from "@/types";
 // ============================================
 
 export async function getSalaryLogs(staffId?: string): Promise<SalaryLog[]> {
-    let q;
-    if (staffId) {
-        q = query(
-            collection(db, "salaryLogs"),
-            where("staffId", "==", staffId),
-            orderBy("creditedAt", "desc")
-        );
-    } else {
-        q = query(
-            collection(db, "salaryLogs"),
-            orderBy("creditedAt", "desc")
-        );
-    }
+    try {
+        // NO COMPOUND QUERY - fetch all, filter client-side to avoid index issues
+        const snapshot = await getDocs(collection(db, "salaryLogs"));
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-        ...doc.data(),
-        salaryLogId: doc.id,
-    })) as SalaryLog[];
+        let logs = snapshot.docs.map(doc => ({
+            ...doc.data(),
+            salaryLogId: doc.id,
+        })) as SalaryLog[];
+
+        // Filter by staffId client-side
+        if (staffId) {
+            logs = logs.filter(l => l.staffId === staffId);
+        }
+
+        // Sort client-side (descending by creditedAt)
+        return logs.sort((a, b) => {
+            const aTime = a.creditedAt?.toMillis() || 0;
+            const bTime = b.creditedAt?.toMillis() || 0;
+            return bTime - aTime;
+        });
+    } catch (error) {
+        console.error("Error fetching salary logs:", error);
+        return [];
+    }
 }
 
 export async function createSalaryLog(
@@ -97,31 +102,39 @@ export async function getAdvanceLogs(
     startDate?: Date,
     endDate?: Date
 ): Promise<AdvanceLog[]> {
-    let q = query(collection(db, "advanceLogs"), orderBy("date", "desc"));
+    try {
+        // NO COMPOUND QUERY - fetch all, filter client-side to avoid index issues
+        const snapshot = await getDocs(collection(db, "advanceLogs"));
 
-    if (staffId) {
-        q = query(
-            collection(db, "advanceLogs"),
-            where("staffId", "==", staffId),
-            orderBy("date", "desc")
-        );
-    }
+        let logs = snapshot.docs.map(doc => ({
+            ...doc.data(),
+            advanceId: doc.id,
+        })) as AdvanceLog[];
 
-    const snapshot = await getDocs(q);
-    let logs = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        advanceId: doc.id,
-    })) as AdvanceLog[];
+        // Filter by staffId client-side
+        if (staffId) {
+            logs = logs.filter(l => l.staffId === staffId);
+        }
 
-    // Filter by date range if provided
-    if (startDate && endDate) {
-        logs = logs.filter(log => {
-            const logDate = log.date.toDate();
-            return logDate >= startDate && logDate <= endDate;
+        // Filter by date range if provided
+        if (startDate && endDate) {
+            logs = logs.filter(log => {
+                const logDate = log.date?.toDate();
+                if (!logDate) return false;
+                return logDate >= startDate && logDate <= endDate;
+            });
+        }
+
+        // Sort client-side (descending by date)
+        return logs.sort((a, b) => {
+            const aTime = a.date?.toMillis() || 0;
+            const bTime = b.date?.toMillis() || 0;
+            return bTime - aTime;
         });
+    } catch (error) {
+        console.error("Error fetching advance logs:", error);
+        return [];
     }
-
-    return logs;
 }
 
 export async function createAdvanceLog(params: {
@@ -167,31 +180,39 @@ export async function getDailyWageLogs(
     startDate?: Date,
     endDate?: Date
 ): Promise<DailyWageLog[]> {
-    let q = query(collection(db, "dailyWageLogs"), orderBy("date", "desc"));
+    try {
+        // NO COMPOUND QUERY - fetch all, filter client-side to avoid index issues
+        const snapshot = await getDocs(collection(db, "dailyWageLogs"));
 
-    if (staffId) {
-        q = query(
-            collection(db, "dailyWageLogs"),
-            where("staffId", "==", staffId),
-            orderBy("date", "desc")
-        );
-    }
+        let logs = snapshot.docs.map(doc => ({
+            ...doc.data(),
+            wageLogId: doc.id,
+        })) as DailyWageLog[];
 
-    const snapshot = await getDocs(q);
-    let logs = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        wageLogId: doc.id,
-    })) as DailyWageLog[];
+        // Filter by staffId client-side
+        if (staffId) {
+            logs = logs.filter(l => l.staffId === staffId);
+        }
 
-    // Filter by date range if provided
-    if (startDate && endDate) {
-        logs = logs.filter(log => {
-            const logDate = log.date.toDate();
-            return logDate >= startDate && logDate <= endDate;
+        // Filter by date range if provided
+        if (startDate && endDate) {
+            logs = logs.filter(log => {
+                const logDate = log.date?.toDate();
+                if (!logDate) return false;
+                return logDate >= startDate && logDate <= endDate;
+            });
+        }
+
+        // Sort client-side (descending by date)
+        return logs.sort((a, b) => {
+            const aTime = a.date?.toMillis() || 0;
+            const bTime = b.date?.toMillis() || 0;
+            return bTime - aTime;
         });
+    } catch (error) {
+        console.error("Error fetching daily wage logs:", error);
+        return [];
     }
-
-    return logs;
 }
 
 export async function createDailyWageLog(params: {
