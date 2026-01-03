@@ -28,6 +28,7 @@ import {
     getStitchingStaff,
     getAariStaff,
     getMonthlyStaff,
+    getAllActiveStaff,
     getSalaryLedgerEntries,
     getStaffWorkLogs,
     getStaffWorkSummary,
@@ -41,11 +42,11 @@ import {
     getStaffSalarySummaries,
 } from "@/lib/salaryLedger";
 
-type TabType = "stitching" | "aari" | "monthly";
+type TabType = "all" | "stitching" | "aari" | "monthly";
 
 export default function AccountsPage() {
     const { userData } = useAuth();
-    const [activeTab, setActiveTab] = useState<TabType>("stitching");
+    const [activeTab, setActiveTab] = useState<TabType>("all");
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -81,7 +82,10 @@ export default function AccountsPage() {
         try {
             let staff: User[] = [];
 
-            if (activeTab === "stitching") {
+            if (activeTab === "all") {
+                staff = await getAllActiveStaff();
+                setDateRange(getWeekDateRange());
+            } else if (activeTab === "stitching") {
                 staff = await getStitchingStaff();
                 setDateRange(getWeekDateRange());
             } else if (activeTab === "aari") {
@@ -214,9 +218,10 @@ export default function AccountsPage() {
     };
 
     const tabs = [
-        { id: "stitching" as const, label: "Stitching / Tailors", icon: Users },
+        { id: "all" as const, label: "All Staff", icon: Users },
+        { id: "stitching" as const, label: "Tailors / Stitching", icon: Users },
         { id: "aari" as const, label: "AARI Workers", icon: Sparkles },
-        { id: "monthly" as const, label: "Monthly Staff", icon: Briefcase },
+        { id: "monthly" as const, label: "Monthly Salary", icon: Briefcase },
     ];
 
     return (
