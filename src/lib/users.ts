@@ -40,27 +40,28 @@ export const MONTHLY_SALARY_ROLES = [
 /**
  * Get all active staff members from the users collection
  * Does NOT depend on any workflow/order logic
+ * SIMPLE APPROACH: Just get ALL users, filter client-side
  */
 export async function getAllActiveStaff(): Promise<User[]> {
     try {
-        // First try with isActive filter
-        const activeQuery = query(
-            collection(db, "users"),
-            where("isActive", "==", true)
-        );
+        // Simple approach: Get ALL users, no Firestore filtering
+        // This avoids any index or query issues
+        const snapshot = await getDocs(collection(db, "users"));
 
-        const snapshot = await getDocs(activeQuery);
+        console.log("Fetched users count:", snapshot.docs.length);
 
-        if (snapshot.docs.length > 0) {
-            return snapshot.docs.map(d => d.data() as User);
+        if (snapshot.docs.length === 0) {
+            console.warn("No users found in Firestore users collection");
+            return [];
         }
 
-        // If no results, get all users and filter client-side
-        // (handles case where isActive field doesn't exist)
-        const allUsersSnapshot = await getDocs(collection(db, "users"));
-        return allUsersSnapshot.docs
-            .map(d => d.data() as User)
-            .filter(user => user.isActive !== false); // Include undefined as active
+        // Filter client-side: include if isActive is true OR undefined (not explicitly false)
+        const users = snapshot.docs
+            .map(d => ({ ...d.data(), staffId: d.id } as User))
+            .filter(user => user.isActive !== false);
+
+        console.log("Active users after filter:", users.length);
+        return users;
 
     } catch (error) {
         console.error("Error fetching active staff:", error);
