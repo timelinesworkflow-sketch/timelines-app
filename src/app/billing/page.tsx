@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import Toast from "@/components/Toast";
 import BillTemplate from "@/components/billing/BillTemplate";
-import html2pdf from "html2pdf.js";
+// NOTE: html2pdf is dynamically imported below to avoid "self is not defined" during SSR/build
 
 type TabType = "create" | "pending" | "paid" | "delivered";
 
@@ -873,6 +873,9 @@ export default function BillingPage() {
                                             html2canvas: { scale: 2, useCORS: true },
                                             jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
                                         };
+                                        // Dynamic import to avoid "self is not defined" during SSR/build
+                                        const html2pdfModule = await import("html2pdf.js");
+                                        const html2pdf = html2pdfModule.default;
                                         await html2pdf().set(opt).from(billTemplateRef.current).save();
                                         setToast({ message: "Bill downloaded successfully!", type: "success" });
                                     } catch (error) {
