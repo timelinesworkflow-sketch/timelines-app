@@ -38,9 +38,11 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         itemId: `ITEM_${Date.now()}_${itemNumber}`,
         itemName: "",
         quantity: 1,
+        garmentType: garmentType,
+        measurementType: "measurements", // Default to manual measurements
         measurements: {},
-        designNotes: "",
         referenceImages: [],
+        designNotes: "",
         materialCost: 0,
         labourCost: 0,
         // deadline is set when the order is actually created
@@ -48,7 +50,6 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         handledBy: "",
         handledByName: "",
         timeline: [],
-        garmentType: garmentType,
     };
 }
 

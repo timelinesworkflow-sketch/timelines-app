@@ -54,7 +54,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
 
     // Additional order fields
-    const [clothType, setClothType] = useState("");
     const [designNotes, setDesignNotes] = useState("");
     const [price, setPrice] = useState<number>(0);
     const [advanceAmount, setAdvanceAmount] = useState<number>(0);
@@ -214,7 +213,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 confirmedAt: null,
                 finalProductImages: [],
                 // Additional fields
-                clothType,
                 designNotes,
                 price,
                 advanceAmount,
@@ -418,18 +416,41 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
                 {/* Due Date - Prominent Position */}
                 <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                    <label className="label text-indigo-700 dark:text-indigo-300 font-semibold flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>Due Date *</span>
-                    </label>
-                    <input
-                        type="date"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        className="input text-lg font-medium"
-                        required
-                        min={new Date().toISOString().split("T")[0]}
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Entry Date - Auto-filled */}
+                        <div>
+                            <label className="label text-green-700 dark:text-green-300 font-semibold flex items-center space-x-2">
+                                <Clock className="w-4 h-4" />
+                                <span>Entry Date</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={new Date().toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric"
+                                })}
+                                className="input bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                disabled
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Auto-filled with current date</p>
+                        </div>
+                        {/* Due Date */}
+                        <div>
+                            <label className="label text-indigo-700 dark:text-indigo-300 font-semibold flex items-center space-x-2">
+                                <Clock className="w-4 h-4" />
+                                <span>Due Date *</span>
+                            </label>
+                            <input
+                                type="date"
+                                value={dueDate}
+                                onChange={(e) => setDueDate(e.target.value)}
+                                className="input text-lg font-medium"
+                                required
+                                min={new Date().toISOString().split("T")[0]}
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Product Category / Garment Type */}
@@ -502,17 +523,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label className="label">Cloth Type</label>
-                        <input
-                            type="text"
-                            value={clothType}
-                            onChange={(e) => setClothType(e.target.value)}
-                            className="input"
-                            placeholder="e.g., Cotton, Silk, Polyester"
-                        />
-                    </div>
+                <div>
                     <div>
                         <label className="label">Design Notes</label>
                         <input

@@ -172,9 +172,9 @@ export default function OrderDetailPage() {
                                                 </div>
                                                 <div className="flex items-center space-x-3">
                                                     <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${item.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
-                                                            item.status === 'ready' ? 'bg-green-100 text-green-700' :
-                                                                item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
-                                                                    'bg-yellow-100 text-yellow-700'
+                                                        item.status === 'ready' ? 'bg-green-100 text-green-700' :
+                                                            item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
+                                                                'bg-yellow-100 text-yellow-700'
                                                         }`}>
                                                         {item.status}
                                                     </span>
@@ -253,14 +253,24 @@ export default function OrderDetailPage() {
                                                         <div>
                                                             <p className="text-xs text-gray-500 mb-2">Reference Images</p>
                                                             <div className="flex space-x-2 overflow-x-auto">
-                                                                {item.referenceImages.map((url, imgIdx) => (
-                                                                    <img
-                                                                        key={imgIdx}
-                                                                        src={url}
-                                                                        alt={`Reference ${imgIdx + 1}`}
-                                                                        className="w-16 h-16 rounded object-cover"
-                                                                    />
-                                                                ))}
+                                                                {item.referenceImages.map((img, imgIdx) => {
+                                                                    // Handle both string (legacy) and ItemReferenceImage (new) formats
+                                                                    const imageUrl = typeof img === 'string' ? img : img.imageUrl;
+                                                                    const title = typeof img === 'string' ? `Reference ${imgIdx + 1}` : img.title;
+
+                                                                    return (
+                                                                        <div key={imgIdx} className="flex-shrink-0">
+                                                                            <img
+                                                                                src={imageUrl}
+                                                                                alt={title}
+                                                                                className="w-16 h-16 rounded object-cover"
+                                                                            />
+                                                                            {typeof img !== 'string' && img.title && (
+                                                                                <p className="text-xs text-gray-500 mt-1 max-w-16 truncate">{img.title}</p>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}

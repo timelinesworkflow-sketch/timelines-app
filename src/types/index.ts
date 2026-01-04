@@ -486,14 +486,35 @@ export interface ItemTimelineEntry {
     completedAt: Timestamp;
 }
 
+// Reference image with metadata (for measurement garment option)
+export interface ItemReferenceImage {
+    imageUrl: string;           // Firebase Storage URL
+    title: string;              // MANDATORY - Image title
+    description?: string;       // Optional text description
+    descriptionImageUrl?: string; // Optional image-as-description
+}
+
+// Measurement type toggle for each item
+export type ItemMeasurementType = "measurements" | "measurement_garment";
+
 // Individual item within an order
 export interface OrderItem {
     itemId: string;
     itemName: string;           // e.g., "Blouse", "Chudidar", "Lehenga"
     quantity: number;
+    garmentType?: GarmentType;
+
+    // NEW: Measurement type toggle (per item)
+    measurementType: ItemMeasurementType;
+
+    // If measurementType = "measurements" - manual measurements
     measurements: { [key: string]: number | string };
+
+    // If measurementType = "measurement_garment" - reference images with metadata
+    // Can also be string[] for backward compatibility with legacy orders
+    referenceImages: ItemReferenceImage[] | string[];
+
     designNotes: string;
-    referenceImages: string[];
     materialCost: number;
     labourCost: number;
     deadline: Timestamp;
@@ -501,7 +522,7 @@ export interface OrderItem {
     handledBy: string;          // Current handler userId
     handledByName?: string;     // Current handler name
     timeline: ItemTimelineEntry[];
-    garmentType?: GarmentType;
+
     // Per-item staff assignment (set by Admin)
     assignedStaffId?: string;
     assignedStaffName?: string;

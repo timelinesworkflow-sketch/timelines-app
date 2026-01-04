@@ -7,7 +7,7 @@ import { Plus } from "lucide-react";
 import CreateOrderForm from "./CreateOrderForm";
 import OrdersList from "./OrdersList";
 
-export default function IntakePage() {
+export default function CustomerEntryPage() {
     const [showCreateForm, setShowCreateForm] = useState(false);
 
     return (
@@ -18,7 +18,7 @@ export default function IntakePage() {
                 <div className="page-content">
                     <div className="mb-6">
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                            Intake
+                            Customer Entry
                         </h1>
                         <p className="text-gray-600 dark:text-gray-400">
                             Create and manage customer orders

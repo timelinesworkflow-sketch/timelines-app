@@ -1,5 +1,8 @@
 "use client";
 
+// Prevent static prerendering to avoid jsPDF "self is not defined" error
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
