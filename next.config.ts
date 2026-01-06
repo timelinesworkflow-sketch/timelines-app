@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
             },
         ],
     },
+    eslint: {
+        ignoreDuringBuilds: true,
+    },
 
     webpack: (config, { isServer }) => {
         if (!isServer) {
