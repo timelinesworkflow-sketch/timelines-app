@@ -243,6 +243,7 @@ export interface MaterialPurchase {
 export interface MaterialUsage {
     usageId: string;
     orderId: string;
+    itemId?: string; // Item-specific usage
     materialId: string;          // Material ID / Lining ID
     materialName: string;
     category: string;
@@ -297,6 +298,7 @@ export interface PurchaseRequest {
     sourceStage: "intake" | "materials";  // Where the purchase was requested from
     // Order-based purchase fields (only for purchaseType: "order")
     orderId?: string;
+    itemId?: string; // Item-specific purchase
     garmentType?: GarmentType;
     // Status tracking
     status: PurchaseStatus;
@@ -518,20 +520,20 @@ export interface OrderItem {
     orderId: string;            // Reference to parent grouping (Order/Visit)
     customerId: string;         // Reference to parent Customer
     customerName: string;       // Denormalized for dashboard display
-    
+
     itemName: string;           // e.g., "Blouse", "Chudidar" - user defined name
     garmentType: GarmentType;   // E.g. blouse, chudi
-    
+
     // Workflow State
     currentStage: WorkflowStage;
     status: ItemStatus;
     timeline: ItemTimelineEntry[]; // Detailed history
-    
+
     // Assignment
     handledBy: string;          // Current handler userId
     handledByName?: string;     // Current handler name
     dueDate: Timestamp;         // Item-specific due date
-    
+
     // New: Measurement type toggle (per item)
     measurementType: ItemMeasurementType;
 
@@ -548,7 +550,10 @@ export interface OrderItem {
 
     // Per-item staff assignment
     assignedStaff?: AssignedStaff; // Staff assigned to this specific item for each stage
-    
+
+    // Per-item Planned Materials
+    plannedMaterials?: OrderPlannedMaterials | null;
+
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }
@@ -596,24 +601,24 @@ export interface Order {
     customerName: string;
     customerPhone: string;
     customerAddress: string;
-    
+
     // Order-level Dates
     createdAt: Timestamp;
     dueDate: Timestamp; // Earliest or Latest of items
     confirmedAt: Timestamp | null;
-    
+
     // Aggregate Financials
     price?: number;
     advanceAmount?: number;
     labourCost?: number;
     materialCost?: number;
     extraExpenses?: number;
-    
+
     // Multi-item fields
     items?: OrderItem[];         // Array of items in this order (Snapshotted)
     totalItems?: number;         // Computed: items.length
     completedItems?: number;     // Computed
-    overallStatus?: OverallOrderStatus;  
+    overallStatus?: OverallOrderStatus;
 
     // Legacy fields maintained for backward compatibility or global defaults
     garmentType?: GarmentType;   // Default for legacy
@@ -632,7 +637,7 @@ export interface Order {
     deliveredAt?: Timestamp;
     designNotes?: string;
     clothType?: string;
-    
+
     // Aari Work workflow (Global setting)
     includeAariWork?: boolean;     // For Aari categories - includes Aari Work stage
 

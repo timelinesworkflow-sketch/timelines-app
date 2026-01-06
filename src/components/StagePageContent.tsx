@@ -68,7 +68,7 @@ export default function StagePageContent({
                 nextStatus = "in_progress"; // Or 'hold'
             } else {
                 // Complete or Approve -> Move Forward
-                nextStage = getNextWorkflowStage(currentItem.currentStage);
+                nextStage = getNextWorkflowStage(currentItem);
             }
 
             if (!nextStage) {

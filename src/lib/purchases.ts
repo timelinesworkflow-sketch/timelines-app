@@ -36,6 +36,7 @@ export async function createPurchaseRequest(data: {
     purchaseType: PurchaseType;
     sourceStage: "intake" | "materials";
     orderId?: string;
+    itemId?: string;
     garmentType?: GarmentType;
 }): Promise<string> {
     const purchaseData: Omit<PurchaseRequest, "purchaseId"> = {
@@ -51,6 +52,7 @@ export async function createPurchaseRequest(data: {
         purchaseType: data.purchaseType,
         sourceStage: data.sourceStage,
         orderId: data.orderId,
+        itemId: data.itemId,
         garmentType: data.garmentType,
         status: "pending",
         createdAt: Timestamp.now(),

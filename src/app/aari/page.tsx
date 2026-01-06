@@ -186,7 +186,7 @@ export default function AariPage() {
                                         Customer Details
                                     </h2>
                                     <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-medium capitalize">
-                                        {currentOrder.garmentType.replace(/_/g, " ")}
+                                        {(currentOrder.garmentType || "").replace(/_/g, " ")}
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -231,7 +231,7 @@ export default function AariPage() {
 
                                 <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg mb-4">
                                     <p className="text-purple-800 dark:text-purple-300 font-medium">
-                                        ✨ This is a <span className="font-bold capitalize">{currentOrder.garmentType.replace(/_/g, " ")}</span> order
+                                        ✨ This is a <span className="font-bold capitalize">{(currentOrder.garmentType || "").replace(/_/g, " ")}</span> order
                                         requiring special Aari work/embroidery.
                                     </p>
                                 </div>

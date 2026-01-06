@@ -1,1234 +1,436 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import TopBar from "@/components/TopBar";
-import { Order, PlannedMaterial, PlannedMaterialWithStatus, MaterialUsage, InventoryItem, getSamplerImageUrl } from "@/types";
-import { MEASUREMENT_LABELS } from "@/types";
-import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth-context";
 import {
-    checkStockStatus,
-    getAllInventory,
-    addPurchase,
-    recordMaterialUsage,
-    getInventorySummary,
-    InventorySummary
+    OrderItem,
+    InventoryItem,
+    MaterialPurchase,
+    PlannedMaterial,
+    PlannedMaterialWithStatus,
+    OrderPlannedMaterials
+} from "@/types";
+import {
+    getAllInventory as getInventory,
+    recordMaterialUsage
 } from "@/lib/inventory";
-import { createPurchaseRequest, getCompletedOrderPurchases, addPurchasedMaterialToInventory } from "@/lib/purchases";
-import { generateMarkingTasksForOrder, getMarkingTasksForOrder } from "@/lib/markingTemplates";
-import { PurchaseRequest } from "@/types";
-import { Timestamp } from "firebase/firestore";
+import {
+    createPurchaseRequest
+} from "@/lib/purchases";
+import {
+    getItemsForStage,
+    updateItem,
+    updateItemStage,
+    getNextWorkflowStage
+} from "@/lib/orderItems";
 import {
     Package,
-    ArrowLeft,
-    ArrowRight,
-    Check,
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    RefreshCw,
+    Archive,
+    Scissors,
     AlertTriangle,
-    CheckCircle,
-    XCircle,
-    Plus,
-    ShoppingCart,
-    Warehouse,
-    Eye,
-    FileText,
-    Ruler,
-    X,
-    Shirt,
-    Edit
+    ShoppingCart
 } from "lucide-react";
-import Toast from "@/components/Toast";
+import toast from "react-hot-toast";
+import { Timestamp } from "firebase/firestore";
+import StagePageContent from "@/components/StagePageContent";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
-type TabType = "orders" | "inventory";
-
 export default function MaterialsPage() {
-    const { userData } = useAuth();
-    const [activeTab, setActiveTab] = useState<TabType>("orders");
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
+    const { user, userProfile } = useAuth();
+    const [items, setItems] = useState<OrderItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-
-    // Order materials with stock status
-    const [materialsWithStatus, setMaterialsWithStatus] = useState<PlannedMaterialWithStatus[]>([]);
-
-    // Inventory state
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
-    const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
-
-    // View Order Requirements Modal
-    const [showRequirementsModal, setShowRequirementsModal] = useState(false);
-
-    // Purchase form state
-    const [showPurchaseForm, setShowPurchaseForm] = useState(false);
-    const [purchaseForm, setPurchaseForm] = useState({
-        materialId: "",
-        materialName: "",
-        category: "",
-        quantity: 0,
-        meter: 0,
-        costPerMeter: 0,
-        supplier: "",
-    });
-
-    // Request Purchase state
-    const [requestingPurchase, setRequestingPurchase] = useState(false);
-
-    // Completed order purchases state (for showing purchased materials for this order)
-    const [completedOrderPurchases, setCompletedOrderPurchases] = useState<PurchaseRequest[]>([]);
-    const [addingToInventory, setAddingToInventory] = useState<string | null>(null);
-
-    // Edit Materials Modal state
-    const [showEditMaterialsModal, setShowEditMaterialsModal] = useState(false);
-    const [editingMaterials, setEditingMaterials] = useState<PlannedMaterial[]>([]);
-    const [savingMaterials, setSavingMaterials] = useState(false);
+    const [activeTab, setActiveTab] = useState<"items" | "inventory">("items");
 
     useEffect(() => {
-        loadOrders();
-        loadInventory();
-    }, []);
+        loadData();
+    }, [user]);
 
-    useEffect(() => {
-        if (orders[currentIndex]?.plannedMaterials?.items) {
-            loadMaterialsWithStatus(orders[currentIndex].plannedMaterials.items);
-        } else {
-            setMaterialsWithStatus([]);
-        }
-        // Load completed purchases for current order
-        if (orders[currentIndex]?.orderId) {
-            loadCompletedPurchases(orders[currentIndex].orderId);
-        } else {
-            setCompletedOrderPurchases([]);
-        }
-    }, [currentIndex, orders]);
-
-    const loadOrders = async () => {
+    const loadData = async () => {
+        if (!user) return;
+        setLoading(true);
         try {
-            const data = await getOrdersForStage("materials");
-            setOrders(data);
+            // Load Items for Materials Stage
+            const itemsData = await getItemsForStage("materials", user.uid);
+            setItems(itemsData);
+
+            // Load Inventory (renamed export in inventory.ts is getAllInventory but I imported getInventory, check exports)
+            // inventory.ts exports: getAllInventory. I must import that or alias it.
+            // I will fix imports below to use getAllInventory as getInventory or just use getAllInventory.
+            const inventoryData = await getInventory();
+            setInventory(inventoryData);
         } catch (error) {
-            console.error("Failed to load orders:", error);
+            console.error("Error loading data:", error);
+            toast.error("Failed to load materials data");
         } finally {
             setLoading(false);
         }
     };
 
-    const loadInventory = async () => {
+    // -------------------------------------------------------------
+    // ITEM ACTIONS
+    // -------------------------------------------------------------
+
+    const handleUpdatePlannedMaterials = async (itemId: string, materials: PlannedMaterial[]) => {
         try {
-            const [inv, summary] = await Promise.all([
-                getAllInventory(),
-                getInventorySummary(),
-            ]);
-            setInventory(inv);
-            setInventorySummary(summary);
-        } catch (error) {
-            console.error("Failed to load inventory:", error);
-        }
-    };
+            // Create proper OrderPlannedMaterials object
+            const plannedMaterialsData: OrderPlannedMaterials = {
+                items: materials,
+                plannedByStaffId: user!.uid,
+                plannedByStaffName: userProfile?.name || "Unknown",
+                plannedAt: Timestamp.now()
+            };
 
-    const loadMaterialsWithStatus = async (plannedItems: PlannedMaterial[]) => {
-        try {
-            // Only check stock for company-provided materials
-            // Customer-provided materials skip inventory check entirely
-            const companyMaterials = plannedItems.filter(item => item.materialSource !== "customer");
-            const withStatus = await checkStockStatus(companyMaterials);
-
-            // Add customer materials back with "customer_provided" status
-            const customerMaterials = plannedItems
-                .filter(item => item.materialSource === "customer")
-                .map(item => ({
-                    ...item,
-                    stockStatus: "customer_provided" as any,
-                    availableLength: 0,
-                    shortageLength: 0,
-                }));
-
-            setMaterialsWithStatus([...withStatus, ...customerMaterials]);
-        } catch (error) {
-            console.error("Failed to check stock status:", error);
-        }
-    };
-
-    const loadCompletedPurchases = async (orderId: string) => {
-        try {
-            const purchases = await getCompletedOrderPurchases(orderId);
-            setCompletedOrderPurchases(purchases);
-        } catch (error) {
-            console.error("Failed to load completed purchases:", error);
-            setCompletedOrderPurchases([]);
-        }
-    };
-
-    const handleAddLeftoverToInventory = async (purchase: PurchaseRequest) => {
-        if (!userData) return;
-
-        setAddingToInventory(purchase.purchaseId);
-        try {
-            // Add to inventory
-            await addPurchase({
-                materialId: purchase.materialId,
-                materialName: purchase.materialName,
-                category: "",
-                quantity: 1,
-                meter: purchase.measurement,
-                costPerMeter: 0,
-                laborStaffId: userData.staffId,
-                laborStaffName: userData.name,
+            await updateItem(itemId, {
+                plannedMaterials: plannedMaterialsData
             });
 
-            // Mark as added to inventory
-            await addPurchasedMaterialToInventory(
-                purchase.purchaseId,
-                purchase.measurement,
-                userData.staffId,
-                userData.name
-            );
+            // Update local state
+            setItems(prev => prev.map(item =>
+                item.itemId === itemId
+                    ? { ...item, plannedMaterials: plannedMaterialsData }
+                    : item
+            ));
 
-            setToast({ message: "Leftover material added to inventory!", type: "success" });
-            // Reload completed purchases
-            if (orders[currentIndex]?.orderId) {
-                loadCompletedPurchases(orders[currentIndex].orderId);
-            }
-            loadInventory();
+            toast.success("Materials updated");
         } catch (error) {
-            console.error("Failed to add to inventory:", error);
-            setToast({ message: "Failed to add to inventory", type: "error" });
-        } finally {
-            setAddingToInventory(null);
+            console.error("Error updating materials:", error);
+            toast.error("Failed to update materials");
         }
     };
 
-    const currentOrder = orders[currentIndex];
-
-    // Open edit materials modal with current materials
-    const handleOpenEditModal = () => {
-        const currentMaterials = currentOrder?.plannedMaterials?.items || [];
-        setEditingMaterials([...currentMaterials]);
-        setShowEditMaterialsModal(true);
-    };
-
-    // Save edited materials to order
-    const handleSaveMaterials = async () => {
-        if (!currentOrder || !userData) return;
-
-        setSavingMaterials(true);
-        try {
-            const validMaterials = editingMaterials.filter(
-                m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
-            );
-
-            await updateOrder(currentOrder.orderId, {
-                plannedMaterials: validMaterials.length > 0 ? {
-                    items: validMaterials,
-                    plannedByStaffId: userData.staffId,
-                    plannedByStaffName: userData.name,
-                    plannedAt: Timestamp.now(),
-                } : null,
-            });
-
-            setToast({ message: "Materials updated successfully!", type: "success" });
-            setShowEditMaterialsModal(false);
-
-            // Reload orders and re-check stock
-            await loadOrders();
-            if (validMaterials.length > 0) {
-                await loadMaterialsWithStatus(validMaterials);
-            } else {
-                setMaterialsWithStatus([]);
-            }
-        } catch (error) {
-            console.error("Failed to save materials:", error);
-            setToast({ message: "Failed to save materials", type: "error" });
-        } finally {
-            setSavingMaterials(false);
-        }
-    };
-
-    // Check if all materials are satisfied (in stock OR have completed purchase)
-    // OR if no materials are planned (can complete stage directly)
-    const canCompleteStage = () => {
-        // If no materials planned, stage can be completed
-        if (materialsWithStatus.length === 0) return true;
-
-        return materialsWithStatus.every(material => {
-            // In stock or customer provided - OK
-            const status = material.stockStatus as string;
-            if (status === "in_stock" || status === "customer_provided") {
-                return true;
-            }
-
-            // Check if there's a completed purchase for this material
-            const hasPurchase = completedOrderPurchases.some(p =>
-                p.materialName.toLowerCase() === material.materialName.toLowerCase() ||
-                p.materialId === material.materialId
-            );
-
-            return hasPurchase;
-        });
-    };
-
-    const handleConfirmUsage = async () => {
-        if (!currentOrder || !userData) return;
-
-        const hasShortage = materialsWithStatus.some(m => m.stockStatus !== "in_stock");
-        if (hasShortage) {
-            setToast({ message: "Cannot confirm: Some materials are not in stock. Please add purchases first.", type: "error" });
+    const handleConfirmUsage = async (item: OrderItem) => {
+        if (!item.plannedMaterials?.items || item.plannedMaterials.items.length === 0) {
+            toast.error("No materials planned for this item");
             return;
         }
 
-        setActionLoading(true);
+        // 1. Validate Stock again
+        const statusMap = checkStockAvailability(item.plannedMaterials.items, inventory);
+        const hasShortage = item.plannedMaterials.items.some(m => {
+            const status = statusMap.get(m.materialName + m.colour);
+            return status?.stockStatus === "not_in_stock";
+        });
+
+        if (hasShortage) {
+            toast.error("Cannot confirm usage: Material shortage detected");
+            return;
+        }
 
         try {
-            // Record usage for each material
-            const usageItems: MaterialUsage[] = [];
-            for (const material of materialsWithStatus) {
-                const usageId = await recordMaterialUsage({
-                    orderId: currentOrder.orderId,
-                    materialId: material.materialId,
-                    materialName: material.materialName,
-                    category: "",
-                    quantity: 1,
-                    meter: material.measurement,
-                    laborStaffId: userData.staffId,
-                    laborStaffName: userData.name,
-                });
-                usageItems.push({
-                    usageId,
-                    orderId: currentOrder.orderId,
-                    materialId: material.materialId,
-                    materialName: material.materialName,
-                    category: "",
-                    quantity: 1,
-                    meter: material.measurement,
-                    totalLength: material.measurement,
-                    laborStaffId: userData.staffId,
-                    laborStaffName: userData.name,
-                    createdAt: Timestamp.now(),
-                });
-            }
+            // 2. Deduct from Inventory & Record Usage
+            for (const material of item.plannedMaterials.items) {
+                if (material.materialSource === "customer") continue; // Skip customer materials
 
-            const nextStage = getNextStage("materials", currentOrder.activeStages);
+                const invItem = inventory.find(i =>
+                    i.materialName.trim().toLowerCase() === material.materialName.trim().toLowerCase() &&
+                    (i.category || "").includes(material.colour || "")
+                );
 
-            // Update order
-            // Prepare updates
-            const updates: any = {
-                currentStage: nextStage || "completed",
-                status: nextStage ? "in_progress" : "completed",
-                materials: {
-                    usedItems: usageItems,
-                    totalLengthUsed: materialsWithStatus.reduce((sum, m) => sum + m.measurement, 0),
-                    completedByStaffId: userData.staffId,
-                    completedByStaffName: userData.name,
-                    completedAt: Timestamp.now(),
-                },
-            };
+                const targetInvItem = inventory.find(i => i.inventoryId === material.materialId) || invItem;
 
-            // Generate marking tasks if moving to marking stage
-            if (nextStage === "marking") {
-                // SAFETY: Ensure marking tasks exist before transitioning
-                const existingTasks = await getMarkingTasksForOrder(currentOrder.orderId);
-                if (!existingTasks || existingTasks.length === 0) {
-                    await generateMarkingTasksForOrder(currentOrder.orderId, currentOrder.garmentType);
+                if (targetInvItem) {
+                    let deductLength = material.measurement;
+
+                    // Record Usage (This also updates inventory stock in lib/inventory.ts)
+                    await recordMaterialUsage({
+                        orderId: item.orderId,
+                        itemId: item.itemId,
+                        materialId: targetInvItem.inventoryId,
+                        materialName: targetInvItem.materialName,
+                        category: targetInvItem.category,
+                        quantity: 1,
+                        meter: deductLength,
+                        totalLength: deductLength,
+                        laborStaffId: user!.uid,
+                        laborStaffName: userProfile?.name || "Unknown",
+                        createdAt: Timestamp.now()
+                    } as any);
                 }
             }
 
-            // Update order
-            await updateOrder(currentOrder.orderId, updates);
+            // 3. Move Item to Next Stage
+            const nextStage = getNextWorkflowStage(item);
+            if (nextStage) {
+                await updateItemStage(
+                    item.itemId,
+                    nextStage,
+                    "in_progress", // Next stage triggers default status
+                    user!.uid,
+                    userProfile?.name || "Unknown"
+                );
 
-            await addTimelineEntry(currentOrder.orderId, {
-                staffId: userData.staffId,
-                role: userData.role,
-                stage: "materials",
-                action: "completed",
-            });
-
-            await logStaffWork({
-                staffId: userData.staffId,
-                firebaseUid: userData.email,
-                email: userData.email,
-                role: userData.role,
-                orderId: currentOrder.orderId,
-                stage: "materials",
-                action: "completed",
-            });
-
-            setToast({ message: "Materials stage completed!", type: "success" });
-
-            // Reload data
-            await loadOrders();
-            await loadInventory();
-        } catch (error: unknown) {
-            console.error("Failed to confirm usage:", error);
-            const errorMessage = error instanceof Error ? error.message : "Failed to confirm usage";
-            setToast({ message: errorMessage, type: "error" });
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const handleAddPurchase = async () => {
-        if (!userData) return;
-
-        if (!purchaseForm.materialId || !purchaseForm.materialName || purchaseForm.quantity <= 0 || purchaseForm.meter <= 0) {
-            setToast({ message: "Please fill all required fields", type: "error" });
-            return;
-        }
-
-        setActionLoading(true);
-
-        try {
-            await addPurchase({
-                materialId: purchaseForm.materialId,
-                materialName: purchaseForm.materialName,
-                category: purchaseForm.category,
-                quantity: purchaseForm.quantity,
-                meter: purchaseForm.meter,
-                costPerMeter: purchaseForm.costPerMeter,
-                supplier: purchaseForm.supplier,
-                laborStaffId: userData.staffId,
-                laborStaffName: userData.name,
-            });
-
-            setToast({ message: "Purchase added successfully!", type: "success" });
-            setShowPurchaseForm(false);
-            setPurchaseForm({
-                materialId: "",
-                materialName: "",
-                category: "",
-                quantity: 0,
-                meter: 0,
-                costPerMeter: 0,
-                supplier: "",
-            });
-
-            // Reload data
-            await loadInventory();
-            if (currentOrder?.plannedMaterials?.items) {
-                await loadMaterialsWithStatus(currentOrder.plannedMaterials.items as PlannedMaterialWithStatus[]);
+                toast.success(`Item moved to ${nextStage}`);
+                setItems(prev => prev.filter(i => i.itemId !== item.itemId));
+            } else {
+                toast.success("Item completed!");
+                await updateItemStage(
+                    item.itemId,
+                    "completed",
+                    "completed",
+                    user!.uid,
+                    userProfile?.name || "Unknown"
+                );
+                setItems(prev => prev.filter(i => i.itemId !== item.itemId));
             }
+
         } catch (error) {
-            console.error("Failed to add purchase:", error);
-            setToast({ message: "Failed to add purchase", type: "error" });
-        } finally {
-            setActionLoading(false);
+            console.error("Error confirming usage:", error);
+            toast.error("Failed to process material usage");
         }
     };
 
-    // Handle Request Purchase for materials with shortages
-    const handleRequestPurchase = async () => {
-        if (!currentOrder || !userData) return;
-
-        const materialsWithShortages = materialsWithStatus.filter(m => m.shortageLength > 0);
-        if (materialsWithShortages.length === 0) {
-            setToast({ message: "No materials with shortages to request", type: "info" });
-            return;
-        }
-
-        setRequestingPurchase(true);
-
+    const handleRequestPurchase = async (item: OrderItem, material: PlannedMaterialWithStatus) => {
         try {
-            // Calculate due date as 3 days from now (can be customized)
-            const dueDate = new Date();
-            dueDate.setDate(dueDate.getDate() + 3);
+            await createPurchaseRequest({
+                materialId: material.materialId || "unknown",
+                materialName: material.materialName,
+                colour: material.colour,
+                measurement: material.shortageLength || material.measurement,
+                unit: material.unit,
+                dueDate: item.dueDate?.toDate() || new Date(),
+                requestedByStaffId: user!.uid,
+                requestedByStaffName: userProfile?.name || "Unknown",
+                requestedByRole: "materials",
+                purchaseType: "order",
+                sourceStage: "materials",
+                orderId: item.orderId,
+                itemId: item.itemId,
+                garmentType: item.garmentType
+            });
+            toast.success("Purchase requested successfully");
+        } catch (error) {
+            console.error("Error requesting purchase:", error);
+            toast.error("Failed to request purchase");
+        }
+    };
 
-            // Create purchase requests for each material with shortage
-            for (const material of materialsWithShortages) {
-                await createPurchaseRequest({
-                    materialId: material.materialId,
-                    materialName: material.materialName,
-                    colour: material.colour,
-                    measurement: material.shortageLength,
-                    unit: material.unit,
-                    dueDate,
-                    requestedByStaffId: userData.staffId,
-                    requestedByStaffName: userData.name,
-                    requestedByRole: userData.role,
-                    purchaseType: "order",
-                    sourceStage: "materials",
-                    orderId: currentOrder.orderId,
-                    garmentType: currentOrder.garmentType,
+    // -------------------------------------------------------------
+    // STOCK CHECKING LOGIC
+    // -------------------------------------------------------------
+
+    const checkStockAvailability = (materials: PlannedMaterial[], inventory: InventoryItem[]) => {
+        const statusMap = new Map<string, PlannedMaterialWithStatus>();
+
+        materials.forEach(mat => {
+            if (mat.materialSource === "customer") {
+                statusMap.set(mat.materialName + mat.colour, {
+                    ...mat,
+                    stockStatus: "in_stock",
+                    availableLength: 9999,
+                    shortageLength: 0
+                });
+                return;
+            }
+
+            let invItem = inventory.find(i => i.inventoryId === mat.materialId);
+            if (!invItem) {
+                invItem = inventory.find(i =>
+                    i.materialName.toLowerCase().includes(mat.materialName.toLowerCase())
+                );
+            }
+
+            if (invItem) {
+                const available = invItem.availableLength;
+                const needed = mat.measurement;
+
+                if (available >= needed) {
+                    statusMap.set(mat.materialName + mat.colour, {
+                        ...mat,
+                        stockStatus: "in_stock",
+                        availableLength: available,
+                        shortageLength: 0
+                    });
+                } else {
+                    statusMap.set(mat.materialName + mat.colour, {
+                        ...mat,
+                        stockStatus: "not_in_stock",
+                        availableLength: available,
+                        shortageLength: needed - available
+                    });
+                }
+            } else {
+                statusMap.set(mat.materialName + mat.colour, {
+                    ...mat,
+                    stockStatus: "not_in_stock",
+                    availableLength: 0,
+                    shortageLength: mat.measurement
                 });
             }
+        });
 
-            setToast({
-                message: `Requested ${materialsWithShortages.length} purchase(s) for the Purchase stage!`,
-                type: "success"
-            });
-        } catch (error) {
-            console.error("Failed to request purchase:", error);
-            setToast({ message: "Failed to request purchase", type: "error" });
-        } finally {
-            setRequestingPurchase(false);
-        }
+        return statusMap;
     };
-
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case "in_stock":
-                return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">✅ In Stock</span>;
-            case "partial_stock":
-                return <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">⚠️ Partial Stock</span>;
-            case "not_in_stock":
-                return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">❌ Not in Stock</span>;
-            default:
-                return null;
-        }
-    };
-
-    if (loading) {
-        return (
-            <ProtectedRoute allowedRoles={["materials", "supervisor", "admin"]}>
-                <div className="page-container min-h-screen">
-                    <TopBar />
-                    <div className="flex justify-center py-12">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-                    </div>
-                </div>
-            </ProtectedRoute>
-        );
-    }
 
     return (
-        <ProtectedRoute allowedRoles={["materials", "supervisor", "admin"]}>
-            <div className="page-container min-h-screen">
-                <TopBar />
+        <StagePageContent stageName="materials" stageDisplayName="Materials">
+            <div className="space-y-6">
+                {/* TABS */}
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+                    <button
+                        onClick={() => setActiveTab("items")}
+                        className={`pb-4 px-6 text-sm font-medium transition-colors relative ${activeTab === "items"
+                            ? "text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400"
+                            : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                            }`}
+                    >
+                        Active Items ({items.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("inventory")}
+                        className={`pb-4 px-6 text-sm font-medium transition-colors relative ${activeTab === "inventory"
+                            ? "text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400"
+                            : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                            }`}
+                    >
+                        Inventory Management
+                    </button>
+                    <button
+                        onClick={loadData}
+                        className="ml-auto p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                        title="Refresh"
+                    >
+                        <RefreshCw className="w-5 h-5" />
+                    </button>
+                </div>
 
-                {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+                {/* ITEMS LIST */}
+                {activeTab === "items" && (
+                    <div className="space-y-4">
+                        {loading ? (
+                            <div className="flex justify-center p-12">
+                                <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+                            </div>
+                        ) : items.length === 0 ? (
+                            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/30 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                                <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-white">No items pending materials</h3>
+                                <p className="text-gray-500 dark:text-gray-400">All items are stocked or moved to marking.</p>
+                            </div>
+                        ) : (
+                            items.map(item => {
+                                const materials = item.plannedMaterials?.items || [];
+                                const statusMap = checkStockAvailability(materials, inventory);
+                                const hasShortage = Array.from(statusMap.values()).some(s => s.stockStatus !== "in_stock");
 
-                <div className="page-content">
-                    {/* Header */}
-                    <div className="mb-6">
-                        <div className="flex items-center space-x-3 mb-2">
-                            <Package className="w-8 h-8 text-indigo-600" />
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                                Materials
-                            </h1>
-                        </div>
-                        <p className="text-gray-600 dark:text-gray-400">
-                            Manage order materials and inventory
-                        </p>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="flex space-x-1 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit">
-                        <button
-                            onClick={() => setActiveTab("orders")}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === "orders"
-                                ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
-                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
-                                }`}
-                        >
-                            <ShoppingCart className="w-4 h-4" />
-                            <span>Order Materials ({orders.length})</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("inventory")}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 ${activeTab === "inventory"
-                                ? "bg-white dark:bg-gray-700 text-indigo-600 shadow-sm"
-                                : "text-gray-600 dark:text-gray-400 hover:text-gray-900"
-                                }`}
-                        >
-                            <Warehouse className="w-4 h-4" />
-                            <span>Inventory</span>
-                        </button>
-                    </div>
-
-                    {/* ORDER-BASED MATERIALS TAB */}
-                    {activeTab === "orders" && (
-                        <>
-                            {orders.length === 0 ? (
-                                <div className="card text-center py-12">
-                                    <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                                    <p className="text-gray-600 dark:text-gray-400">No orders in materials stage</p>
-                                </div>
-                            ) : (
-                                <div className="card">
-                                    {/* Order Header with View Requirements Button */}
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div>
-                                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                                                Order #{currentOrder?.customerId}
-                                            </h2>
-                                            <p className="text-sm text-gray-500">
-                                                {currentIndex + 1} of {orders.length} orders • {currentOrder?.garmentType}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center space-x-3">
-                                            <div className="text-right mr-4">
-                                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    Due: {currentOrder?.dueDate?.toDate().toLocaleDateString()}
+                                return (
+                                    <div key={item.itemId} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        {/* HEADER */}
+                                        <div className="p-4 border-b border-gray-100 dark:border-gray-700/50 flex flex-col sm:flex-row justify-between items-start gap-4 bg-gray-50/50 dark:bg-gray-800/50">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded uppercase">
+                                                        {item.garmentType.replace(/_/g, " ")}
+                                                    </span>
+                                                    <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
+                                                        {item.itemName || "Unnamed Item"}
+                                                    </h3>
+                                                </div>
+                                                <p className="text-sm text-gray-500 flex items-center gap-2">
+                                                    <span>Order #{item.orderId.substring(item.orderId.length - 6)}</span>
+                                                    <span>•</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" />
+                                                        Due: {item.dueDate?.toDate().toLocaleDateString()}
+                                                    </span>
                                                 </p>
                                             </div>
-                                            {/* VIEW REQUIREMENTS BUTTON */}
-                                            <button
-                                                onClick={() => setShowRequirementsModal(true)}
-                                                className="btn btn-primary flex items-center space-x-2"
-                                            >
-                                                <FileText className="w-4 h-4" />
-                                                <span>View Order Requirements</span>
-                                            </button>
-                                        </div>
-                                    </div>
 
-                                    {/* Quick Info Cards */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
-                                            <p className="text-xs text-blue-600 uppercase">Customer</p>
-                                            <p className="font-semibold text-blue-800 dark:text-blue-300 truncate">{currentOrder?.customerName}</p>
-                                        </div>
-                                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg px-3 py-2">
-                                            <p className="text-xs text-purple-600 uppercase">Garment</p>
-                                            <p className="font-semibold text-purple-800 dark:text-purple-300 capitalize">{currentOrder?.garmentType}</p>
-                                        </div>
-                                        <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg px-3 py-2">
-                                            <p className="text-xs text-orange-600 uppercase">Due Date</p>
-                                            <p className="font-semibold text-orange-800 dark:text-orange-300">{currentOrder?.dueDate?.toDate().toLocaleDateString()}</p>
-                                        </div>
-                                        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
-                                            <p className="text-xs text-green-600 uppercase">Materials Planned</p>
-                                            <p className="font-semibold text-green-800 dark:text-green-300">{materialsWithStatus.length} items</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Planned Materials with Stock Status */}
-                                    <div className="mb-6">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
-                                                <Eye className="w-5 h-5 text-indigo-600" />
-                                                <span>Materials Required</span>
-                                            </h3>
-                                            <button
-                                                onClick={handleOpenEditModal}
-                                                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50"
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                                Edit Materials
-                                            </button>
-                                        </div>
-
-                                        {materialsWithStatus.length === 0 ? (
-                                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                                                <div className="flex items-start space-x-2">
-                                                    <Package className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                                                    <div className="flex-1">
-                                                        <p className="font-medium text-blue-800 dark:text-blue-300">No materials planned</p>
-                                                        <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
-                                                            You can add materials using the <strong>&quot;Edit Materials&quot;</strong> button, or skip directly to stage completion if no materials are needed.
-                                                        </p>
-                                                        <button
-                                                            onClick={handleOpenEditModal}
-                                                            className="mt-3 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                                        >
-                                                            <Plus className="w-4 h-4" />
-                                                            Add Materials
-                                                        </button>
+                                            {/* ACTIONS */}
+                                            <div className="flex items-center gap-2">
+                                                {materials.length > 0 && !hasShortage ? (
+                                                    <button
+                                                        onClick={() => handleConfirmUsage(item)}
+                                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-all"
+                                                    >
+                                                        <CheckCircle2 className="w-4 h-4" />
+                                                        Confirm & Send to Marking
+                                                    </button>
+                                                ) : materials.length === 0 ? (
+                                                    <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                                        <AlertCircle className="w-4 h-4" />
+                                                        Plan Materials to Proceed
                                                     </div>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                {/* Shortage Alert */}
-                                                {materialsWithStatus.some(m => m.stockStatus !== "in_stock") && (
-                                                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
-                                                        <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                                                        <div className="flex-1">
-                                                            <p className="font-medium text-red-700 dark:text-red-400">Purchase Required</p>
-                                                            <p className="text-sm text-red-600 dark:text-red-500 mb-2">
-                                                                Some materials are not in stock. Request a purchase or add directly.
-                                                            </p>
-                                                            <button
-                                                                onClick={handleRequestPurchase}
-                                                                disabled={requestingPurchase}
-                                                                className="btn btn-primary text-sm flex items-center space-x-2"
-                                                            >
-                                                                <ShoppingCart className="w-4 h-4" />
-                                                                <span>{requestingPurchase ? "Requesting..." : "Request Purchase for Shortages"}</span>
-                                                            </button>
-                                                        </div>
+                                                ) : (
+                                                    <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                                                        <AlertTriangle className="w-4 h-4" />
+                                                        Shortage Detected
                                                     </div>
                                                 )}
+                                            </div>
+                                        </div>
 
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse text-sm">
-                                                        <thead>
-                                                            <tr className="bg-gray-100 dark:bg-gray-800">
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Material ID</th>
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Name</th>
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Category</th>
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Required</th>
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Available</th>
-                                                                <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Status</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {materialsWithStatus.map((material, idx) => (
-                                                                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-mono text-xs">
-                                                                        {material.materialId}
-                                                                    </td>
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                                        {material.materialName}
-                                                                    </td>
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                                        {material.colour || "-"}
-                                                                    </td>
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium">
-                                                                        {material.measurement.toFixed(2)} {material.unit}
-                                                                    </td>
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                                        {material.availableLength.toFixed(2)} m
-                                                                    </td>
-                                                                    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                                        {getStatusBadge(material.stockStatus)}
-                                                                        {material.shortageLength > 0 && (
-                                                                            <p className="text-xs text-red-600 mt-1">
-                                                                                Need: {material.shortageLength.toFixed(2)} m more
-                                                                            </p>
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
+                                        {/* CONTENT */}
+                                        <div className="p-4">
+                                            <div className="mb-4">
+                                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                                    <Scissors className="w-4 h-4 text-gray-400" />
+                                                    Planned Materials
+                                                </h4>
 
-                                    {/* Completed Order Purchases Section */}
-                                    {completedOrderPurchases.length > 0 && (
-                                        <div className="mb-6">
-                                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                                <CheckCircle className="w-5 h-5 text-green-600" />
-                                                <span>Completed Purchases for this Order</span>
-                                                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{completedOrderPurchases.length}</span>
-                                            </h3>
-                                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                                                <div className="space-y-3">
-                                                    {completedOrderPurchases.map((purchase) => (
-                                                        <div key={purchase.purchaseId} className="flex items-center justify-between bg-white dark:bg-slate-800 p-3 rounded-lg border border-green-200 dark:border-green-700">
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-medium text-green-800 dark:text-green-300">{purchase.materialName}</span>
-                                                                    <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">✅ Purchased</span>
-                                                                </div>
-                                                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                                                    {purchase.colour && <span className="mr-3">Color: {purchase.colour}</span>}
-                                                                    <span>For Order: {purchase.measurement} {purchase.unit}</span>
-                                                                </div>
-                                                                {purchase.completedByStaffName && (
-                                                                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                                                        Completed by: {purchase.completedByStaffName}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex flex-col items-end gap-1">
-                                                                {/* Show actual purchased and excess info */}
-                                                                {purchase.actualPurchasedQuantity && purchase.actualPurchasedQuantity > purchase.measurement && (
-                                                                    <>
-                                                                        <span className="text-xs text-gray-500">
-                                                                            Actual: {purchase.actualPurchasedQuantity} {purchase.unit}
+                                                <PlannedMaterialsInput
+                                                    initialMaterials={item.plannedMaterials?.items || []}
+                                                    onChange={(m) => handleUpdatePlannedMaterials(item.itemId, m)}
+                                                    readOnly={false}
+                                                />
+                                            </div>
+
+                                            {/* STATUS DETAILS */}
+                                            {materials.length > 0 && (
+                                                <div className="mt-4 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
+                                                    <h5 className="text-xs font-semibold uppercase text-gray-500 mb-2">Availability Check</h5>
+                                                    <div className="space-y-2">
+                                                        {materials.map((mat, idx) => {
+                                                            const status = statusMap.get(mat.materialName + mat.colour);
+                                                            return (
+                                                                <div key={idx} className="flex items-center justify-between text-sm">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`w-2 h-2 rounded-full ${status?.stockStatus === "in_stock" ? "bg-green-500" : "bg-red-500"
+                                                                            }`} />
+                                                                        <span className="text-gray-700 dark:text-gray-300">
+                                                                            {mat.materialName} ({mat.colour})
                                                                         </span>
-                                                                        {purchase.excessQuantity && purchase.excessQuantity > 0 && (
-                                                                            <span className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                                                                <Check className="w-3 h-3" />
-                                                                                {purchase.excessQuantity.toFixed(2)} {purchase.unit} → Inventory
-                                                                            </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <span className="text-gray-500">
+                                                                            Needs: {mat.measurement} {mat.unit}
+                                                                        </span>
+                                                                        {status?.stockStatus !== "in_stock" && (
+                                                                            <button
+                                                                                onClick={() => status && handleRequestPurchase(item, status)}
+                                                                                className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+                                                                            >
+                                                                                <ShoppingCart className="w-3 h-3" />
+                                                                                Request Purchase
+                                                                            </button>
                                                                         )}
-                                                                    </>
-                                                                )}
-                                                                <span className="mt-1 px-2 py-1 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 text-xs rounded">
-                                                                    Ready for use ✓
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                <div className="mt-3 text-sm text-green-700 dark:text-green-400">
-                                                    💡 These materials are now available for this order. You can proceed with stage completion.
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Quick Purchase Button */}
-                                    <div className="mb-6">
-                                        <button
-                                            onClick={() => setShowPurchaseForm(true)}
-                                            className="btn btn-outline flex items-center space-x-2"
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                            <span>Add Purchase</span>
-                                        </button>
-                                    </div>
-
-                                    {/* Confirm Usage Button */}
-                                    <button
-                                        onClick={handleConfirmUsage}
-                                        disabled={actionLoading || !canCompleteStage()}
-                                        className="w-full btn btn-primary flex items-center justify-center space-x-2 disabled:opacity-50"
-                                    >
-                                        <Check className="w-5 h-5" />
-                                        <span>{actionLoading ? "Processing..." : "Confirm Usage & Complete Stage"}</span>
-                                    </button>
-
-                                    {/* Navigation */}
-                                    <div className="flex justify-between mt-6 pt-4 border-t">
-                                        <button
-                                            onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
-                                            disabled={currentIndex === 0}
-                                            className="btn btn-outline flex items-center space-x-2 disabled:opacity-50"
-                                        >
-                                            <ArrowLeft className="w-4 h-4" />
-                                            <span>Previous</span>
-                                        </button>
-                                        <button
-                                            onClick={() => setCurrentIndex(Math.min(orders.length - 1, currentIndex + 1))}
-                                            disabled={currentIndex === orders.length - 1}
-                                            className="btn btn-outline flex items-center space-x-2 disabled:opacity-50"
-                                        >
-                                            <span>Next</span>
-                                            <ArrowRight className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* INVENTORY TAB */}
-                    {activeTab === "inventory" && (
-                        <>
-                            {/* Summary Cards */}
-                            {inventorySummary && (
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                    <div className="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
-                                        <p className="text-xs text-blue-600 uppercase font-medium">Total Items</p>
-                                        <p className="text-2xl font-bold text-blue-700">{inventorySummary.totalItems}</p>
-                                    </div>
-                                    <div className="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
-                                        <p className="text-xs text-green-600 uppercase font-medium">Available Stock</p>
-                                        <p className="text-2xl font-bold text-green-700">{inventorySummary.totalAvailableLength.toFixed(1)} m</p>
-                                    </div>
-                                    <div className="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20">
-                                        <p className="text-xs text-purple-600 uppercase font-medium">Total Used</p>
-                                        <p className="text-2xl font-bold text-purple-700">{inventorySummary.totalUsedLength.toFixed(1)} m</p>
-                                    </div>
-                                    <div className="card bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20">
-                                        <p className="text-xs text-red-600 uppercase font-medium">Low Stock</p>
-                                        <p className="text-2xl font-bold text-red-700">{inventorySummary.lowStockCount}</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Add Purchase Button */}
-                            <div className="mb-4">
-                                <button
-                                    onClick={() => setShowPurchaseForm(true)}
-                                    className="btn btn-primary flex items-center space-x-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    <span>Add Bulk Purchase</span>
-                                </button>
-                            </div>
-
-                            {/* Inventory Table */}
-                            <div className="card">
-                                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-                                    Inventory ({inventory.length} items)
-                                </h3>
-
-                                {inventory.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        No inventory items. Add a purchase to get started.
-                                    </div>
-                                ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse text-sm">
-                                            <thead>
-                                                <tr className="bg-gray-100 dark:bg-gray-800">
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Material ID</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Name</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Category</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Bought</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Total Used</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Available</th>
-                                                    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left">Last Updated</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {inventory.map((item) => (
-                                                    <tr key={item.inventoryId} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${item.availableLength < 5 ? 'bg-red-50 dark:bg-red-900/10' : ''}`}>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 font-mono text-xs">
-                                                            {item.materialId}
-                                                        </td>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                            {item.materialName}
-                                                        </td>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                            {item.category}
-                                                        </td>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                            {item.totalBoughtLength.toFixed(2)} m
-                                                        </td>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
-                                                            {item.totalUsedLength.toFixed(2)} m
-                                                        </td>
-                                                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 font-bold ${item.availableLength < 5 ? 'text-red-600' : 'text-green-600'}`}>
-                                                            {item.availableLength.toFixed(2)} m
-                                                            {item.availableLength < 5 && <span className="ml-2 text-xs">⚠️ Low</span>}
-                                                        </td>
-                                                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-xs">
-                                                            {item.lastUpdatedAt?.toDate().toLocaleDateString()}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    )}
-
-                    {/* ORDER REQUIREMENTS MODAL */}
-                    {showRequirementsModal && currentOrder && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white dark:bg-gray-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                                {/* Modal Header */}
-                                <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <FileText className="w-6 h-6 text-indigo-600" />
-                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                                            Order Requirements
-                                        </h2>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowRequirementsModal(false)}
-                                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-
-                                <div className="p-6 space-y-6">
-                                    {/* Order Info */}
-                                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <p className="text-xs text-gray-500 uppercase">Order ID</p>
-                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.orderId.slice(0, 8)}...</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 uppercase">Customer</p>
-                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.customerName}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 uppercase">Garment Type</p>
-                                                <p className="font-bold text-gray-900 dark:text-white capitalize flex items-center space-x-2">
-                                                    <Shirt className="w-4 h-4 text-indigo-600" />
-                                                    <span>{currentOrder.garmentType}</span>
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 uppercase">Due Date</p>
-                                                <p className="font-bold text-gray-900 dark:text-white">{currentOrder.dueDate?.toDate().toLocaleDateString()}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* MEASUREMENTS SECTION */}
-                                    <div>
-                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                            <Ruler className="w-5 h-5 text-blue-600" />
-                                            <span>Measurements</span>
-                                        </h3>
-                                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                                            {currentOrder.measurements && Object.keys(currentOrder.measurements).length > 0 ? (
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                    {Object.entries(currentOrder.measurements).map(([key, value]) => (
-                                                        <div key={key} className="bg-white dark:bg-gray-800 rounded px-3 py-2 border border-blue-100 dark:border-blue-800">
-                                                            <p className="text-xs text-blue-600 uppercase">{MEASUREMENT_LABELS[key] || key}</p>
-                                                            <p className="font-bold text-blue-800 dark:text-blue-200">{value || "—"}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-500">No measurements recorded</p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* PLANNED MATERIALS SECTION */}
-                                    <div>
-                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                            <Package className="w-5 h-5 text-purple-600" />
-                                            <span>Materials Required (Planned at Intake)</span>
-                                        </h3>
-                                        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                                            {currentOrder.plannedMaterials?.items && currentOrder.plannedMaterials.items.length > 0 ? (
-                                                <>
-                                                    <div className="mb-2 text-xs text-purple-600">
-                                                        Planned by: {currentOrder.plannedMaterials.plannedByStaffName} on {currentOrder.plannedMaterials.plannedAt?.toDate().toLocaleDateString()}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full border-collapse text-sm">
-                                                            <thead>
-                                                                <tr className="bg-purple-100 dark:bg-purple-800/30">
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Material ID</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Name</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left">Colour</th>
-                                                                    <th className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-left font-bold">Measurement</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {currentOrder.plannedMaterials.items.map((item, idx) => (
-                                                                    <tr key={idx} className="bg-white dark:bg-gray-800">
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-mono text-xs">{item.materialId}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.materialName}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1">{item.colour || "-"}</td>
-                                                                        <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 font-bold text-purple-700">{item.measurement} {item.unit}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                            <tfoot>
-                                                                <tr className="bg-purple-100 dark:bg-purple-800/30 font-bold">
-                                                                    <td colSpan={3} className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-right">Total:</td>
-                                                                    <td className="border border-purple-300 dark:border-purple-700 px-2 py-1 text-purple-800">
-                                                                        {currentOrder.plannedMaterials.items.reduce((sum, i) => sum + i.measurement, 0).toFixed(2)}
-                                                                    </td>
-                                                                </tr>
-                                                            </tfoot>
-                                                        </table>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <div className="text-center py-4">
-                                                    <AlertTriangle className="w-8 h-8 mx-auto text-yellow-500 mb-2" />
-                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                        No materials were planned during intake.
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 mt-1">
-                                                        Use the measurements above to determine required materials.
-                                                    </p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-
-                                    {/* Sampler Images */}
-                                    {currentOrder.samplerImages && currentOrder.samplerImages.length > 0 && (
-                                        <div>
-                                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
-                                                <Eye className="w-5 h-5 text-green-600" />
-                                                <span>Reference Images</span>
-                                            </h3>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {currentOrder.samplerImages.map((img, idx) => (
-                                                    <img
-                                                        key={idx}
-                                                        src={getSamplerImageUrl(img)}
-                                                        alt={`Reference ${idx + 1}`}
-                                                        className="w-full h-24 object-cover rounded-lg border"
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Modal Footer */}
-                                <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t dark:border-gray-700 px-6 py-4">
-                                    <button
-                                        onClick={() => setShowRequirementsModal(false)}
-                                        className="w-full btn btn-primary"
-                                    >
-                                        Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Purchase Form Modal */}
-                    {showPurchaseForm && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                                    Add Bulk Purchase
-                                </h3>
-
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="label">Material ID *</label>
-                                        <input
-                                            type="text"
-                                            value={purchaseForm.materialId}
-                                            onChange={(e) => setPurchaseForm({ ...purchaseForm, materialId: e.target.value })}
-                                            className="input"
-                                            placeholder="e.g., FAB001"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="label">Material Name *</label>
-                                        <input
-                                            type="text"
-                                            value={purchaseForm.materialName}
-                                            onChange={(e) => setPurchaseForm({ ...purchaseForm, materialName: e.target.value })}
-                                            className="input"
-                                            placeholder="Cotton Fabric"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="label">Category</label>
-                                        <input
-                                            type="text"
-                                            value={purchaseForm.category}
-                                            onChange={(e) => setPurchaseForm({ ...purchaseForm, category: e.target.value })}
-                                            className="input"
-                                            placeholder="Fabric"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="label">Quantity *</label>
-                                            <input
-                                                type="number"
-                                                value={purchaseForm.quantity || ""}
-                                                onChange={(e) => setPurchaseForm({ ...purchaseForm, quantity: parseFloat(e.target.value) || 0 })}
-                                                className="input"
-                                                placeholder="0"
-                                                min="0"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="label">Meter per Qty *</label>
-                                            <input
-                                                type="number"
-                                                value={purchaseForm.meter || ""}
-                                                onChange={(e) => setPurchaseForm({ ...purchaseForm, meter: parseFloat(e.target.value) || 0 })}
-                                                className="input"
-                                                placeholder="0"
-                                                min="0"
-                                                step="0.1"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="label">Cost per Meter (₹)</label>
-                                        <input
-                                            type="number"
-                                            value={purchaseForm.costPerMeter || ""}
-                                            onChange={(e) => setPurchaseForm({ ...purchaseForm, costPerMeter: parseFloat(e.target.value) || 0 })}
-                                            className="input"
-                                            placeholder="0"
-                                            min="0"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="label">Supplier (Optional)</label>
-                                        <input
-                                            type="text"
-                                            value={purchaseForm.supplier}
-                                            onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })}
-                                            className="input"
-                                            placeholder="Supplier name"
-                                        />
-                                    </div>
-
-                                    {/* Calculated Total */}
-                                    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-                                        <div className="flex justify-between text-sm">
-                                            <span>Total Length:</span>
-                                            <span className="font-bold">{(purchaseForm.quantity * purchaseForm.meter).toFixed(2)} m</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm mt-1">
-                                            <span>Total Cost:</span>
-                                            <span className="font-bold text-green-600">₹{(purchaseForm.quantity * purchaseForm.meter * purchaseForm.costPerMeter).toFixed(2)}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Staff Info */}
-                                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-sm">
-                                        <strong>Staff:</strong> {userData?.name} ({userData?.staffId})
-                                        <span className="text-xs block text-gray-500">(Auto-filled, cannot be changed)</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex space-x-3 mt-6">
-                                    <button
-                                        onClick={() => setShowPurchaseForm(false)}
-                                        className="flex-1 btn btn-outline"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleAddPurchase}
-                                        disabled={actionLoading}
-                                        className="flex-1 btn btn-primary"
-                                    >
-                                        {actionLoading ? "Adding..." : "Add Purchase"}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Edit Materials Modal */}
-            {showEditMaterialsModal && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4" style={{ zIndex: 9998 }}>
-                    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-auto p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200">
-                                Edit Materials for Order
-                            </h3>
-                            <button onClick={() => setShowEditMaterialsModal(false)} className="text-gray-400 hover:text-gray-600">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                            <p className="text-sm text-blue-700 dark:text-blue-300">
-                                Add or edit materials required for this order. After saving, the system will check stock availability.
-                            </p>
-                        </div>
-
-                        <PlannedMaterialsInput
-                            initialItems={editingMaterials}
-                            onChange={(items) => setEditingMaterials(items)}
-                        />
-
-                        <div className="flex gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <button
-                                onClick={() => setShowEditMaterialsModal(false)}
-                                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveMaterials}
-                                disabled={savingMaterials}
-                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {savingMaterials ? (
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                ) : (
-                                    <>
-                                        <Check className="w-4 h-4" />
-                                        Save Materials
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                                );
+                            })
+                        )}
                     </div>
-                </div>
-            )}
+                )}
 
-            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-        </ProtectedRoute>
+                {activeTab === "inventory" && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center text-gray-500">
+                        <Archive className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p>Inventory Management System</p>
+                        <p className="text-sm mt-2">Use the Purchase Manager workflow for detailed inventory operations.</p>
+                    </div>
+                )}
+            </div>
+        </StagePageContent>
     );
 }

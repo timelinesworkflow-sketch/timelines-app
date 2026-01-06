@@ -29,25 +29,32 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
 /**
  * Get the next stage for an item based on its workflow
  */
-export function getNextWorkflowStage(currentStage: WorkflowStage, activeStages?: string[]): WorkflowStage | null {
-    const currentIndex = WORKFLOW_STAGES.indexOf(currentStage);
+export function getNextWorkflowStage(item: OrderItem): WorkflowStage | null {
+    const currentIndex = WORKFLOW_STAGES.indexOf(item.currentStage);
     if (currentIndex === -1 || currentIndex >= WORKFLOW_STAGES.length - 1) {
         return null;
     }
 
-    // If activeStages is provided, find the next stage that is active
-    if (activeStages && activeStages.length > 0) {
-        for (let i = currentIndex + 1; i < WORKFLOW_STAGES.length; i++) {
-            const stage = WORKFLOW_STAGES[i];
-            // Always include mandatory stages or checked stages
-            if (activeStages.includes(stage) || stage === 'completed' || stage === 'delivery' || stage === 'billing') {
-                return stage;
+    let nextStage = WORKFLOW_STAGES[currentIndex + 1];
+
+    // Conditional Stage Logic: Aari Work
+    if (nextStage === "aari_work") {
+        // Check if garment type is Aari-related
+        const isAariGarment = item.garmentType === "aari_blouse" ||
+            item.garmentType === "aari_pavada_sattai" ||
+            item.garmentType === "aari_pavadai_sattai" as any; // Type hack if needed or ensure type consistency
+
+        if (!isAariGarment) {
+            // Skip Aari Work for non-Aari garments
+            // Find appropriate next stage (usually stitching triggers after aari)
+            const aariIndex = WORKFLOW_STAGES.indexOf("aari_work");
+            if (aariIndex !== -1 && currentIndex + 1 === aariIndex) {
+                nextStage = WORKFLOW_STAGES[aariIndex + 1];
             }
         }
-        return "completed";
     }
 
-    return WORKFLOW_STAGES[currentIndex + 1];
+    return nextStage || "completed";
 }
 
 
@@ -203,6 +210,19 @@ export async function getItemsForStage(
 }
 
 /**
+ * Update an item with generic fields
+ */
+export async function updateItem(itemId: string, updates: Partial<OrderItem>): Promise<void> {
+    const itemRef = doc(db, "orderItems", itemId);
+    const sanitizedUpdates = sanitizeForFirestore(updates as any);
+
+    // Ensure updatedAt is set
+    sanitizedUpdates.updatedAt = Timestamp.now();
+
+    await updateDoc(itemRef, sanitizedUpdates);
+}
+
+/**
  * Update an item's status and stage
  */
 export async function updateItemStage(
@@ -214,30 +234,46 @@ export async function updateItemStage(
 ): Promise<void> {
     const itemRef = doc(db, "orderItems", itemId);
 
+    // We need to append to timeline. 
+    // Using arrayUnion is safer for concurrency but requires exact object match which includes timestamp.
+    // Ideally we use a transaction or just read-modify-write.
+    // For now, since we need to read the current timeline to append correctly:
+
+    // Use getDoc because the ID is the key
+    const { getDoc } = await import("firebase/firestore"); // Dynamic import or assume it's imported (it is not in current imports list fully)
+    // Actually getDocs is imported, but getDoc is not imported in the file currently (checking imports).
+    // The imports are: doc, updateDoc, Timestamp, collection, addDoc, getDocs, query, where, orderBy, setDoc
+    // Missing: getDoc.
+    // So I will update imports first or use getDocs with ID query if I must, but doc() reference is available.
+    // I can just import getDoc at the top.
+    // But since I am replacing this block, I can't easily add top-level imports.
+    // I will use updateDoc with arrayUnion if I can trust it, but without getDoc I can't read old timeline.
+    // Actually, I can use runTransaction if I import it.
+
+    // For now, I will use getDocs with generic query or assume I can add getDoc to imports in a separate step?
+    // No, I'll just use getDocs(query(collection(db, "orderItems"), where("__name__", "==", itemId))) or similar.
+    // Or just use the existing inefficient query for now but fix the logic.
+    // But wait, the existing code used getDocs with where("itemId" == itemId). This assumes itemId field exists.
+    // My createOrderItems sets itemId field. So it works.
+
+    const itemQuery = query(collection(db, "orderItems"), where("itemId", "==", itemId));
+    const snapshot = await getDocs(itemQuery);
+
+    if (snapshot.empty) return;
+
+    const docSnap = snapshot.docs[0];
+    const currentItem = docSnap.data() as OrderItem;
+
     const timelineEntry: ItemTimelineEntry = {
-        stage: newStage,
+        stage: currentItem.currentStage, // Log completion of *current* stage
         completedBy: staffId,
         completedByName: staffName,
         completedAt: Timestamp.now()
     };
 
-    // We can't use arrayUnion easily with complex objects if we want append-only, 
-    // but reading first is safer for timeline integrity or just accepting overwrite if concurrent
-    // For now simple update:
-
-    // We need to read current timeline to append? Firestore requires reading.
-    // Or we store timeline as subcollection? 
-    // For now, let's assume we can just update. But `timeline` is array.
-    // Let's use arrayUnion if possible, but object equality is tricky.
-    // Instead, let's read-modify-write for timeline.
-
-    const itemDoc = await getDocs(query(collection(db, "orderItems"), where("itemId", "==", itemId)));
-    if (itemDoc.empty) return;
-
-    const currentItem = itemDoc.docs[0].data() as OrderItem;
     const newTimeline = [...(currentItem.timeline || []), timelineEntry];
 
-    await updateDoc(itemDoc.docs[0].ref, {
+    await updateDoc(docSnap.ref, {
         currentStage: newStage,
         status: newStatus,
         timeline: newTimeline,
@@ -245,9 +281,6 @@ export async function updateItemStage(
         handledBy: staffId,
         handledByName: staffName
     });
-
-    // Also sync to parent order?
-    // This is optional but good for consistency. We can leave it for now.
 }
 
 /**

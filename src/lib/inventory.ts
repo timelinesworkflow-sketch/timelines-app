@@ -226,6 +226,7 @@ export async function recordMaterialUsage(
     const usageRef = doc(collection(db, USAGE_COLLECTION));
     const usage: MaterialUsage = {
         ...usageData,
+        itemId: usageData.itemId, // Explicitly include itemId
         usageId: usageRef.id,
         totalLength,
         createdAt: Timestamp.now(),

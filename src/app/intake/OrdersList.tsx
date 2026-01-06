@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, PlannedMaterial } from "@/types";
+import { Order, PlannedMaterial } from "@/types";
 import { updateOrder } from "@/lib/orders";
 import { canEditOrder } from "@/lib/customers";
 import { useAuth } from "@/contexts/AuthContext";
-import { Package, Calendar, User, Phone, Edit, X, Save, AlertCircle, Check, DollarSign } from "lucide-react";
+import { Package, Calendar, Phone, Edit, X, Save, AlertCircle, DollarSign, List } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
 import Toast from "@/components/Toast";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
@@ -26,14 +26,12 @@ export default function OrdersList() {
     const [editCustomerName, setEditCustomerName] = useState("");
     const [editCustomerPhone, setEditCustomerPhone] = useState("");
     const [editCustomerAddress, setEditCustomerAddress] = useState("");
-    const [editClothType, setEditClothType] = useState("");
     const [editDesignNotes, setEditDesignNotes] = useState("");
     const [editDueDate, setEditDueDate] = useState("");
     const [editPrice, setEditPrice] = useState<number>(0);
     const [editAdvanceAmount, setEditAdvanceAmount] = useState<number>(0);
     const [editMaterialCost, setEditMaterialCost] = useState<number>(0);
     const [editLabourCost, setEditLabourCost] = useState<number>(0);
-    const [editMeasurements, setEditMeasurements] = useState<Record<string, string>>({});
     const [editPlannedMaterials, setEditPlannedMaterials] = useState<PlannedMaterial[]>([]);
 
     useEffect(() => {
@@ -72,21 +70,12 @@ export default function OrdersList() {
         setEditCustomerName(order.customerName);
         setEditCustomerPhone(order.customerPhone);
         setEditCustomerAddress(order.customerAddress || "");
-        setEditClothType(order.clothType || "");
         setEditDesignNotes(order.designNotes || "");
         setEditDueDate(order.dueDate?.toDate().toISOString().split("T")[0] || "");
         setEditPrice(order.price || 0);
         setEditAdvanceAmount(order.advanceAmount || 0);
         setEditMaterialCost(order.materialCost || 0);
         setEditLabourCost(order.labourCost || 0);
-        // Convert measurements to string values for the form
-        const measurementsAsStrings: Record<string, string> = {};
-        if (order.measurements) {
-            Object.entries(order.measurements).forEach(([key, value]) => {
-                measurementsAsStrings[key] = String(value || "");
-            });
-        }
-        setEditMeasurements(measurementsAsStrings);
         setEditPlannedMaterials(order.plannedMaterials?.items || []);
     };
 
@@ -111,14 +100,12 @@ export default function OrdersList() {
             if (editCustomerName !== undefined) updateData.customerName = editCustomerName;
             if (editCustomerPhone !== undefined) updateData.customerPhone = editCustomerPhone;
             if (editCustomerAddress !== undefined) updateData.customerAddress = editCustomerAddress || "";
-            if (editClothType !== undefined) updateData.clothType = editClothType || "";
             if (editDesignNotes !== undefined) updateData.designNotes = editDesignNotes || "";
             if (editDueDate) updateData.dueDate = Timestamp.fromDate(new Date(editDueDate));
             if (editPrice !== undefined) updateData.price = editPrice || 0;
             if (editAdvanceAmount !== undefined) updateData.advanceAmount = editAdvanceAmount || 0;
             if (editMaterialCost !== undefined) updateData.materialCost = editMaterialCost || 0;
             if (editLabourCost !== undefined) updateData.labourCost = editLabourCost || 0;
-            if (Object.keys(editMeasurements).length > 0) updateData.measurements = editMeasurements;
 
             // Handle planned materials - only set if there are valid items
             if (validPlannedMaterials.length > 0) {
@@ -129,7 +116,6 @@ export default function OrdersList() {
                     plannedAt: Timestamp.now(),
                 };
             }
-            // If no valid materials and there were existing ones, keep the existing ones (don't set at all)
 
             // Add to change history
             updateData.changeHistory = [
@@ -183,12 +169,12 @@ export default function OrdersList() {
     // Edit Modal
     if (editingOrder) {
         return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white dark:bg-gray-900 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <div className="bg-white dark:bg-gray-900 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
                     {/* Modal Header */}
-                    <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+                    <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
                         <div className="flex items-center space-x-3">
                             <Edit className="w-6 h-6 text-indigo-600" />
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -197,7 +183,7 @@ export default function OrdersList() {
                         </div>
                         <button
                             onClick={cancelEditing}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -227,12 +213,12 @@ export default function OrdersList() {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="label">Cloth Type</label>
+                            <div className="col-span-1">
+                                <label className="label">Address</label>
                                 <input
                                     type="text"
-                                    value={editClothType}
-                                    onChange={(e) => setEditClothType(e.target.value)}
+                                    value={editCustomerAddress}
+                                    onChange={(e) => setEditCustomerAddress(e.target.value)}
                                     className="input"
                                 />
                             </div>
@@ -248,7 +234,7 @@ export default function OrdersList() {
                         </div>
 
                         <div>
-                            <label className="label">Design Notes</label>
+                            <label className="label">Design Notes (Overall)</label>
                             <textarea
                                 value={editDesignNotes}
                                 onChange={(e) => setEditDesignNotes(e.target.value)}
@@ -261,11 +247,11 @@ export default function OrdersList() {
                         <div className="border-t pt-4">
                             <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center space-x-2">
                                 <DollarSign className="w-5 h-5 text-green-600" />
-                                <span>Pricing & Costs</span>
+                                <span>Pricing & Costs (Global Totals)</span>
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                 <div>
-                                    <label className="label text-xs">Price (₹)</label>
+                                    <label className="label text-xs">Total Price (₹)</label>
                                     <input
                                         type="number"
                                         value={editPrice || ""}
@@ -303,39 +289,19 @@ export default function OrdersList() {
                             </div>
                         </div>
 
-                        {/* Measurements */}
-                        <div className="border-t pt-4">
-                            <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Measurements</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {Object.entries(editMeasurements).map(([key, value]) => (
-                                    <div key={key}>
-                                        <label className="label text-xs">{MEASUREMENT_LABELS[key] || key}</label>
-                                        <input
-                                            type="text"
-                                            value={value || ""}
-                                            onChange={(e) => setEditMeasurements({
-                                                ...editMeasurements,
-                                                [key]: e.target.value
-                                            })}
-                                            className="input"
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Planned Materials */}
-                        <div className="border-t pt-4">
-                            <PlannedMaterialsInput
-                                initialItems={editPlannedMaterials}
-                                onChange={setEditPlannedMaterials}
-                                disabled={saving}
-                            />
+                        {/* Note about items */}
+                        <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-lg border border-yellow-200 dark:border-yellow-700/30">
+                            <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>
+                                    To edit individual items, measurements, or garment details, please use the specific workflow stage pages.
+                                </span>
+                            </p>
                         </div>
                     </div>
 
                     {/* Modal Footer */}
-                    <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t dark:border-gray-700 px-6 py-4 flex space-x-3">
+                    <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t dark:border-gray-700 px-6 py-4 flex space-x-3 z-10">
                         <button
                             onClick={cancelEditing}
                             className="flex-1 btn btn-outline"
@@ -397,9 +363,12 @@ export default function OrdersList() {
                                 >
                                     {order.status.replace(/_/g, " ")}
                                 </span>
-                                <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-                                    Stage: {order.currentStage}
-                                </span>
+                                {/* Removed Stage Badge as items may have different stages */}
+                                {order.currentStage && (
+                                    <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                                        Status: {order.overallStatus || order.currentStage}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -409,7 +378,11 @@ export default function OrdersList() {
                                 </div>
                                 <div className="flex items-center space-x-1">
                                     <Package className="w-4 h-4" />
-                                    <span className="capitalize">{order.garmentType.replace(/_/g, " ")}</span>
+                                    <span className="capitalize">
+                                        {order.items && order.items.length > 0
+                                            ? `${order.items.length} Items`
+                                            : (order.garmentType ? order.garmentType.replace(/_/g, " ") : "No Items")}
+                                    </span>
                                 </div>
                                 <div className="flex items-center space-x-1">
                                     <Calendar className="w-4 h-4" />
@@ -423,8 +396,14 @@ export default function OrdersList() {
                                 )}
                             </div>
 
-                            <div className="mt-2 text-xs text-gray-500">
-                                Created: {order.createdAt?.toDate().toLocaleDateString()}
+                            <div className="mt-2 text-xs text-gray-500 flex gap-4">
+                                <span>Created: {order.createdAt?.toDate().toLocaleDateString()}</span>
+                                {order.items && order.items.length > 0 && (
+                                    <span className="flex items-center gap-1 text-indigo-600">
+                                        <List className="w-3 h-3" />
+                                        {order.items.map(i => i.garmentType).join(", ")}
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -436,7 +415,7 @@ export default function OrdersList() {
                                 title="Edit Order"
                             >
                                 <Edit className="w-4 h-4" />
-                                <span className="text-sm hidden sm:inline">Edit</span>
+                                <span className="text-sm hidden sm:inline">Edit Details</span>
                             </button>
                         )}
 
