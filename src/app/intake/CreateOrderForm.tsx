@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, PlannedMaterial, OrderItem } from "@/types";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, PlannedMaterial, OrderItem, ItemMeasurementType, ItemReferenceImage } from "@/types";
 import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder } from "@/lib/customers";
 import { uploadImages } from "@/lib/storage";
-import { createEmptyItem, computeOverallStatus, calculateItemsTotals } from "@/lib/orderItems";
+import { createEmptyItem, computeOverallStatus, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Send, Check, Search, Clock, Package, User, Phone, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Upload, Send, Check, Search, Clock, Package, User, Phone, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import Toast from "@/components/Toast";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
@@ -16,9 +16,19 @@ interface CreateOrderFormProps {
     onClose: () => void;
 }
 
+// Local type to handle file uploads before sending to server
+type LocalOrderItem = Partial<OrderItem> & {
+    tempFiles?: {
+        file: File;
+        preview: string;
+        description: string;
+        title: string;
+        isDescriptionImage?: boolean; // For "Image as Description"
+    }[];
+};
+
 export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const { userData } = useAuth();
-    const [step, setStep] = useState<"form" | "success">("form");
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
     // Form state
@@ -27,30 +37,15 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [customerAddress, setCustomerAddress] = useState("");
     const [dueDate, setDueDate] = useState("");
     const [garmentType, setGarmentType] = useState<GarmentType>("blouse");
-    const [measurements, setMeasurements] = useState<Record<string, string>>({});
+
+    // Global active stages (default, can be overridden per item if we want, but usually order-wide for simplicity in UI)
     const [activeStages, setActiveStages] = useState<string[]>(["materials", "marking", "cutting", "stitching", "ironing", "billing"]);
-    const [samplerFiles, setSamplerFiles] = useState<File[]>([]);
-    const [particulars, setParticulars] = useState("");
+
     const [plannedMaterials, setPlannedMaterials] = useState<PlannedMaterial[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Measurement Type Toggle: "customer_gives" or "measurement_blouse"
-    const [measurementType, setMeasurementType] = useState<"customer_gives" | "measurement_blouse">("customer_gives");
-
-    // Enhanced Image Upload State
-    const [imageUploads, setImageUploads] = useState<{
-        file: File;
-        preview: string;
-        description: string;
-    }[]>([]);
-
-    // Blouse-specific image sections (only used when measurementType = "measurement_blouse" and garmentType = "blouse")
-    const [frontNeckImage, setFrontNeckImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
-    const [backNeckImage, setBackNeckImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
-    const [sleeveImage, setSleeveImage] = useState<{ file: File | null; preview: string; description: string }>({ file: null, preview: "", description: "" });
-
     // Multi-item state
-    const [orderItems, setOrderItems] = useState<Partial<OrderItem>[]>([createEmptyItem(1, "blouse")]);
+    const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([createEmptyItem(1, "blouse")]);
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
 
     // Additional order fields
@@ -65,36 +60,19 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
     const [showOrderHistory, setShowOrderHistory] = useState(false);
 
-    // Aari Work toggle (for Aari Blouse / Aari Pavada Sattai categories)
+    // Aari Work toggle
     const [includeAariWork, setIncludeAariWork] = useState(true);
 
-    // Temp order ID for tracking
-    const [tempOrderId, setTempOrderId] = useState("");
-
     useEffect(() => {
-        // Initialize measurements for selected garment type
-        // Aari types use same measurements as base garment
-        const baseType = garmentType === "aari_blouse" ? "blouse"
-            : garmentType === "aari_pavada_sattai" ? "pavadai_sattai"
-                : garmentType;
-        const fields = MEASUREMENT_FIELDS[baseType] || MEASUREMENT_FIELDS["blouse"];
-        const initialMeasurements: Record<string, string> = {};
-        fields.forEach((field) => {
-            initialMeasurements[field] = measurements[field] || "";
-        });
-        setMeasurements(initialMeasurements);
-
-        // Auto-update stages for Aari garment types (include aari_work before stitching)
+        // Auto-update stages for Aari garment types
         if (garmentType === "aari_blouse" || garmentType === "aari_pavada_sattai") {
-            // Aari types need aari_work stage before stitching
             setActiveStages(["materials", "marking", "cutting", "aari_work", "stitching", "ironing", "billing"]);
         } else {
-            // Normal garment types - no aari_work
             setActiveStages(["materials", "marking", "cutting", "stitching", "ironing", "billing"]);
         }
     }, [garmentType]);
 
-    // Lookup customer orders when phone number changes
+    // Lookup customer orders
     useEffect(() => {
         const lookupCustomerOrders = async () => {
             if (customerPhone.length >= 10) {
@@ -104,13 +82,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     setCustomerOrders(orders);
                     if (orders.length > 0) {
                         setShowOrderHistory(true);
-                        // Auto-fill customer name and address from previous order
-                        if (!customerName && orders[0].customerName) {
-                            setCustomerName(orders[0].customerName);
-                        }
-                        if (!customerAddress && orders[0].customerAddress) {
-                            setCustomerAddress(orders[0].customerAddress);
-                        }
+                        if (!customerName && orders[0].customerName) setCustomerName(orders[0].customerName);
+                        if (!customerAddress && orders[0].customerAddress) setCustomerAddress(orders[0].customerAddress);
                     }
                 } catch (error) {
                     console.error("Failed to fetch customer orders:", error);
@@ -127,10 +100,31 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         return () => clearTimeout(debounce);
     }, [customerPhone]);
 
-    const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            setSamplerFiles(Array.from(e.target.files).slice(0, 3));
-        }
+    const handleItemChange = (index: number, updates: Partial<LocalOrderItem>) => {
+        const newItems = [...orderItems];
+        newItems[index] = { ...newItems[index], ...updates };
+        setOrderItems(newItems);
+    };
+
+    const handleFileUpload = (index: number, files: FileList | null) => {
+        if (!files) return;
+        const newFiles = Array.from(files).map(file => ({
+            file,
+            preview: URL.createObjectURL(file),
+            description: "",
+            title: `Image ${file.name}`,
+            isDescriptionImage: false
+        }));
+
+        const currentFiles = orderItems[index].tempFiles || [];
+        handleItemChange(index, { tempFiles: [...currentFiles, ...newFiles] });
+    };
+
+    const removeFile = (itemIndex: number, fileIndex: number) => {
+        const currentFiles = [...(orderItems[itemIndex].tempFiles || [])];
+        const removed = currentFiles.splice(fileIndex, 1);
+        if (removed[0]) URL.revokeObjectURL(removed[0].preview);
+        handleItemChange(itemIndex, { tempFiles: currentFiles });
     };
 
     const handleSubmitForm = async () => {
@@ -139,93 +133,77 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             return;
         }
 
-        if (customerPhone.length < 10) {
-            setToast({ message: "Phone number must be at least 10 digits", type: "error" });
-            return;
-        }
-
         setLoading(true);
 
         try {
-            // Upload sampler images
-            let samplerUrls: string[] = [];
-            try {
-                samplerUrls = samplerFiles.length > 0
-                    ? await uploadImages(samplerFiles, `orders/temp_${Date.now()}/sampler`)
-                    : [];
-            } catch (uploadError: any) {
-                console.error("Image upload failed:", uploadError);
-                let errorMessage = uploadError.message || 'Unknown error';
+            // Upload images for each item
+            const processedItems: OrderItem[] = [];
 
-                if (errorMessage.includes("404") || errorMessage.includes("Not Found")) {
-                    errorMessage = "Storage Bucket not found. Please enable Storage in Firebase Console.";
+            for (const item of orderItems) {
+                let referenceImages: ItemReferenceImage[] = [];
+
+                if (item.tempFiles && item.tempFiles.length > 0) {
+                    const filesToUpload = item.tempFiles.map(f => f.file);
+                    // Upload all files in parallel for this item
+                    const uploadedUrls = await uploadImages(filesToUpload, `orders/${Date.now()}/${item.itemId}`);
+
+                    // Map back to ItemReferenceImage structure
+                    referenceImages = item.tempFiles.map((f, idx) => ({
+                        imageUrl: uploadedUrls[idx],
+                        title: f.title || "Reference Image",
+                        description: f.description,
+                        // If it's a description image, we might handle it differently but for now stores as desc
+                    }));
                 }
 
-                setToast({
-                    message: `Upload failed: ${errorMessage}`,
-                    type: "error"
-                });
-                setLoading(false);
-                return;
+                // Prepare final item
+                processedItems.push({
+                    ...item,
+                    itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    referenceImages,
+                    // If measurement garment, default status might trigger differently? No, standardized.
+                    dueDate: item.dueDate || Timestamp.fromDate(new Date(dueDate)), // Prioritize item deadline or global
+                    // Ensure required fields
+                    measurements: item.measurements || {},
+                    timeline: [{
+                        stage: "intake",
+                        completedBy: userData?.staffId || "system",
+                        completedByName: userData?.name || "System",
+                        completedAt: Timestamp.now()
+                    }],
+                    status: "in_progress",
+                    customerName,
+                    customerId: customerPhone,
+                    currentStage: "materials" // Auto-advance to materials after creation
+                } as OrderItem);
             }
-
-            // Filter valid planned materials
-            const validPlannedMaterials = plannedMaterials.filter(
-                m => m.materialId.trim() !== "" || m.materialName.trim() !== ""
-            );
 
             // Create or update customer profile
             await getOrCreateCustomer(customerPhone, customerName, customerAddress);
 
-            // Prepare items for the order
-            const finalItems = orderItems
-                .filter(item => item.itemName && item.itemName.trim() !== "")
-                .map(item => ({
-                    ...item,
-                    itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    status: "intake" as const,
-                    timeline: [],
-                    handledBy: userData?.staffId || "",
-                    handledByName: userData?.name || "",
-                    deadline: item.deadline || Timestamp.fromDate(new Date(dueDate)),
-                })) as OrderItem[];
+            // Calculate totals
+            const itemsTotals = calculateItemsTotals(processedItems);
 
-            // Compute overall status from items
-            const { totalItems, completedItems, overallStatus } = computeOverallStatus(finalItems);
-            const itemsTotals = calculateItemsTotals(finalItems);
-
-            // Create draft order
+            // 1. Create Order (Visit Container)
             const orderData: Partial<Order> = {
-                customerId: `CUST_${Date.now()}`,
+                customerId: customerPhone, // Linking by phone for simplicity in this model
                 customerName,
                 customerPhone,
                 customerAddress,
-                garmentType,
-                measurements,
+                garmentType, // Set default garment type for legacy support
                 dueDate: Timestamp.fromDate(new Date(dueDate)),
-                samplerImages: samplerUrls,
                 activeStages,
                 currentStage: "intake",
-                status: "draft",
-                assignedStaff: {},
-                materialsCostPlanned: null,
-                changeHistory: [],
-                confirmedAt: null,
-                finalProductImages: [],
-                // Additional fields
-                designNotes,
+                status: "in_progress",
                 price,
                 advanceAmount,
                 materialCost: itemsTotals.totalMaterialCost || materialCost,
                 labourCost: itemsTotals.totalLabourCost || labourCost,
-                // Multi-item fields
-                items: finalItems,
-                totalItems,
-                completedItems,
-                overallStatus,
-                // Planned materials (null if empty - Firestore doesn't accept undefined)
-                plannedMaterials: validPlannedMaterials.length > 0 ? {
-                    items: validPlannedMaterials,
+                items: processedItems, // Snapshot
+
+                // Planned materials
+                plannedMaterials: plannedMaterials.length > 0 ? {
+                    items: plannedMaterials,
                     plannedByStaffId: userData?.staffId || "",
                     plannedByStaffName: userData?.name || "",
                     plannedAt: Timestamp.now(),
@@ -233,27 +211,21 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             };
 
             const orderId = await createOrder(orderData);
-            setTempOrderId(orderId);
 
-            // Update customer stats
-            await updateCustomerOnNewOrder(
-                customerPhone,
-                orderId,
-                price,
-                labourCost,
-                materialCost,
-                0 // extra expenses
-            );
+            // 2. Create Order Items (Workflow Units)
+            // Ensure orderId is set on all items
+            const finalItems = processedItems.map(i => ({ ...i, orderId }));
+            await createOrderItems(orderId, finalItems);
 
-            // Get the first active workflow stage after intake
-            const firstStage = activeStages[0];
-
+            // 3. Update Order with confirmed status (Since we skip OTP for now/Admin entry)
             await updateOrder(orderId, {
                 confirmedAt: Timestamp.now(),
-                status: "in_progress",
-                currentStage: firstStage,
             });
 
+            // 4. Update Customer Stats
+            await updateCustomerOnNewOrder(customerPhone, orderId, price, labourCost, materialCost, 0);
+
+            // 5. Timeline Entry
             if (userData) {
                 await addTimelineEntry(orderId, {
                     staffId: userData.staffId,
@@ -264,554 +236,335 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             }
 
             setToast({ message: "Order created successfully!", type: "success" });
-
             setTimeout(() => {
                 window.location.reload();
             }, 1500);
+
         } catch (error) {
-            console.error("Order creation error:", error);
-            setToast({
-                message: `Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                type: "error"
-            });
+            console.error(error);
+            setToast({ message: "Failed to create order", type: "error" });
         } finally {
             setLoading(false);
         }
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case "completed": return "bg-green-100 text-green-800";
-            case "delivered": return "bg-blue-100 text-blue-800";
-            case "in_progress": return "bg-yellow-100 text-yellow-800";
-            default: return "bg-gray-100 text-gray-800";
-        }
-    };
-
     return (
-        <div className="card max-w-4xl mx-auto">
+        <div className="card max-w-5xl mx-auto">
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create New Order</h2>
+                <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Customer Entry</h2>
+                    <p className="text-sm text-gray-500">Create new items for customer</p>
+                </div>
                 <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
                     <X className="w-5 h-5" />
                 </button>
             </div>
 
             <div className="space-y-6">
-                {/* Customer Information */}
+                {/* 1. Customer Details (Parent) */}
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <h3 className="font-semibold mb-3 flex items-center space-x-2">
+                        <User className="w-4 h-4" />
+                        <span>Customer Details</span>
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="label">Phone Number *</label>
+                            <div className="relative">
+                                <input
+                                    type="tel"
+                                    value={customerPhone}
+                                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ""))}
+                                    className="input"
+                                    placeholder="10-digit number"
+                                    maxLength={15}
+                                />
+                                {loadingCustomerOrders && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="label">Customer Name *</label>
+                            <input
+                                type="text"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                className="input"
+                                placeholder="Name"
+                            />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="label">Address</label>
+                            <input
+                                type="text"
+                                value={customerAddress}
+                                onChange={(e) => setCustomerAddress(e.target.value)}
+                                className="input"
+                                placeholder="Address"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Global Order Settings */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label className="label flex items-center space-x-1">
-                            <Phone className="w-4 h-4" />
-                            <span>Phone Number *</span>
-                        </label>
-                        <div className="relative">
-                            <input
-                                type="tel"
-                                value={customerPhone}
-                                onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ""))}
-                                className="input"
-                                placeholder="Enter 10-digit phone number"
-                                required
-                                maxLength={15}
-                            />
-                            {loadingCustomerOrders && (
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                    <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                                </div>
-                            )}
-                        </div>
-                        {customerPhone.length > 0 && customerPhone.length < 10 && (
-                            <p className="text-xs text-red-500 mt-1 flex items-center space-x-1">
-                                <AlertCircle className="w-3 h-3" />
-                                <span>Phone number must be at least 10 digits</span>
-                            </p>
-                        )}
-                    </div>
-                    <div>
-                        <label className="label flex items-center space-x-1">
-                            <User className="w-4 h-4" />
-                            <span>Customer Name *</span>
-                        </label>
+                        <label className="label text-green-700 font-semibold">Entry Date</label>
                         <input
                             type="text"
-                            value={customerName}
-                            onChange={(e) => setCustomerName(e.target.value)}
+                            value={new Date().toLocaleDateString()}
+                            className="input bg-gray-100 dark:bg-gray-700"
+                            disabled
+                        />
+                    </div>
+                    <div>
+                        <label className="label text-indigo-700 font-semibold">Due Date (Default) *</label>
+                        <input
+                            type="date"
+                            value={dueDate}
+                            onChange={(e) => setDueDate(e.target.value)}
                             className="input"
-                            placeholder="Enter customer name"
                             required
                         />
                     </div>
                 </div>
 
-                {/* OTHER ORDERS BY THIS CUSTOMER */}
-                {showOrderHistory && customerOrders.length > 0 && (
-                    <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="font-semibold text-indigo-800 dark:text-indigo-300 flex items-center space-x-2">
-                                <Clock className="w-5 h-5" />
-                                <span>Other Orders by This Customer ({customerOrders.length})</span>
-                            </h3>
-                            <button
-                                onClick={() => setShowOrderHistory(false)}
-                                className="text-xs text-indigo-600 hover:underline"
-                            >
-                                Hide
-                            </button>
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {customerOrders.map((order) => (
-                                <div
-                                    key={order.orderId}
-                                    className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-indigo-100 dark:border-indigo-800"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="font-medium text-gray-900 dark:text-white text-sm">
-                                                Order #{order.orderId.slice(0, 8)}...
-                                            </p>
-                                            <p className="text-xs text-gray-500 capitalize">
-                                                {order.garmentType.replace(/_/g, " ")}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
-                                                {order.status.replace(/_/g, " ")}
-                                            </span>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Stage: {order.currentStage}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                                        <span>Due: {order.dueDate?.toDate().toLocaleDateString()}</span>
-                                        <span>Created: {order.createdAt?.toDate().toLocaleDateString()}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {customerPhone.length >= 10 && customerOrders.length === 0 && !loadingCustomerOrders && (
-                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                        <p className="text-sm text-green-700 dark:text-green-400">
-                            ✨ This is the first order for this customer!
-                        </p>
-                    </div>
-                )}
-
-                <div>
-                    <label className="label">Address</label>
-                    <textarea
-                        value={customerAddress}
-                        onChange={(e) => setCustomerAddress(e.target.value)}
-                        className="input"
-                        rows={2}
-                        placeholder="Enter address"
-                    />
-                </div>
-
-                {/* Due Date - Prominent Position */}
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Entry Date - Auto-filled */}
-                        <div>
-                            <label className="label text-green-700 dark:text-green-300 font-semibold flex items-center space-x-2">
-                                <Clock className="w-4 h-4" />
-                                <span>Entry Date</span>
-                            </label>
-                            <input
-                                type="text"
-                                value={new Date().toLocaleDateString("en-IN", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric"
-                                })}
-                                className="input bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                                disabled
-                            />
-                            <p className="text-xs text-gray-500 mt-1">Auto-filled with current date</p>
-                        </div>
-                        {/* Due Date */}
-                        <div>
-                            <label className="label text-indigo-700 dark:text-indigo-300 font-semibold flex items-center space-x-2">
-                                <Clock className="w-4 h-4" />
-                                <span>Due Date *</span>
-                            </label>
-                            <input
-                                type="date"
-                                value={dueDate}
-                                onChange={(e) => setDueDate(e.target.value)}
-                                className="input text-lg font-medium"
-                                required
-                                min={new Date().toISOString().split("T")[0]}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Product Category / Garment Type */}
-                <div>
-                    <label className="label">Product Category / Garment Type *</label>
-                    <select
-                        value={garmentType}
-                        onChange={(e) => setGarmentType(e.target.value as GarmentType)}
-                        className="input"
-                    >
-                        <option value="blouse">Blouse</option>
-                        <option value="chudi">Chudi</option>
-                        <option value="frock">Frock</option>
-                        <option value="pavadai_sattai">Pavadai Sattai</option>
-                        <option value="aari_blouse">Aari Blouse</option>
-                        <option value="aari_pavada_sattai">Aari Pavada Sattai</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-
-                {/* Aari Work Toggle - Only for Aari categories */}
-                {(garmentType === "aari_blouse" || garmentType === "aari_pavada_sattai") && (
-                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <label className="font-medium text-purple-800 dark:text-purple-300">Include Aari Work Stage</label>
-                                <p className="text-sm text-purple-600 dark:text-purple-400">Aari staff will be included in this order workflow</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIncludeAariWork(!includeAariWork)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${includeAariWork ? "bg-purple-600" : "bg-gray-300"}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${includeAariWork ? "translate-x-6" : "translate-x-1"}`} />
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Measurement Type Toggle */}
-                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <label className="label mb-3">Measurement Type</label>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setMeasurementType("customer_gives")}
-                            className={`flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all ${measurementType === "customer_gives"
-                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
-                                }`}
-                        >
-                            <div className="flex items-center justify-center space-x-2">
-                                <span>📏</span>
-                                <span>Customer Gives Measurements</span>
-                            </div>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setMeasurementType("measurement_blouse")}
-                            className={`flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all ${measurementType === "measurement_blouse"
-                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
-                                }`}
-                        >
-                            <div className="flex items-center justify-center space-x-2">
-                                <span>👕</span>
-                                <span>Customer Gives Measurement Blouse</span>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-
-                <div>
-                    <div>
-                        <label className="label">Design Notes</label>
-                        <input
-                            type="text"
-                            value={designNotes}
-                            onChange={(e) => setDesignNotes(e.target.value)}
-                            className="input"
-                            placeholder="Special instructions"
-                        />
-                    </div>
-                </div>
-
-                {/* Pricing Section */}
-                <div className="border-t pt-4">
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Pricing & Costs</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div>
-                            <label className="label text-xs">Order Price (₹)</label>
-                            <input
-                                type="number"
-                                value={price || ""}
-                                onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-                                className="input"
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                        <div>
-                            <label className="label text-xs">Advance (₹)</label>
-                            <input
-                                type="number"
-                                value={advanceAmount || ""}
-                                onChange={(e) => setAdvanceAmount(parseFloat(e.target.value) || 0)}
-                                className="input"
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                        <div>
-                            <label className="label text-xs">Material Cost (₹)</label>
-                            <input
-                                type="number"
-                                value={materialCost || ""}
-                                onChange={(e) => setMaterialCost(parseFloat(e.target.value) || 0)}
-                                className="input"
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                        <div>
-                            <label className="label text-xs">Labour Cost (₹)</label>
-                            <input
-                                type="number"
-                                value={labourCost || ""}
-                                onChange={(e) => setLabourCost(parseFloat(e.target.value) || 0)}
-                                className="input"
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Multi-Item Section */}
+                {/* 3. ITEMS LIST (Workflow Units) */}
                 <div className="border-t pt-4">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center space-x-2">
                             <Package className="w-5 h-5 text-indigo-600" />
-                            <span>Order Items ({orderItems.length})</span>
+                            <span>Workflow Items ({orderItems.length})</span>
                         </h3>
                         <button
                             type="button"
                             onClick={() => {
                                 const newItem = createEmptyItem(orderItems.length + 1, garmentType);
-                                newItem.deadline = Timestamp.fromDate(new Date(dueDate || Date.now()));
+                                if (dueDate) {
+                                    newItem.dueDate = Timestamp.fromDate(new Date(dueDate));
+                                }
                                 setOrderItems([...orderItems, newItem]);
                                 setExpandedItems(new Set([...expandedItems, orderItems.length]));
                             }}
-                            className="btn btn-outline text-sm flex items-center space-x-1"
+                            className="btn btn-primary text-sm flex items-center space-x-1"
                         >
                             <Plus className="w-4 h-4" />
                             <span>Add Item</span>
                         </button>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         {orderItems.map((item, index) => (
-                            <div
-                                key={item.itemId || index}
-                                className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-                            >
+                            <div key={index} className="border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
                                 {/* Item Header */}
                                 <div
-                                    className="bg-gray-50 dark:bg-gray-800 px-4 py-3 flex items-center justify-between cursor-pointer"
+                                    className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
                                     onClick={() => {
                                         const newExpanded = new Set(expandedItems);
-                                        if (newExpanded.has(index)) {
-                                            newExpanded.delete(index);
-                                        } else {
-                                            newExpanded.add(index);
-                                        }
+                                        if (newExpanded.has(index)) newExpanded.delete(index);
+                                        else newExpanded.add(index);
                                         setExpandedItems(newExpanded);
                                     }}
                                 >
                                     <div className="flex items-center space-x-3">
-                                        <span className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center text-sm font-bold">
+                                        <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-sm">
                                             {index + 1}
                                         </span>
                                         <div>
-                                            <p className="font-medium text-gray-900 dark:text-white">
+                                            <p className="font-bold text-gray-900 dark:text-white">
                                                 {item.itemName || `Item ${index + 1}`}
                                             </p>
                                             <p className="text-xs text-gray-500">
-                                                {item.garmentType?.replace(/_/g, " ") || garmentType.replace(/_/g, " ")} • Qty: {item.quantity || 1}
+                                                {item.garmentType?.replace(/_/g, " ")} • {item.measurementType === 'measurement_garment' ? 'Pattern Garment' : 'Measurements'}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
-                                        {orderItems.length > 1 && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const newItems = orderItems.filter((_, i) => i !== index);
-                                                    setOrderItems(newItems);
-                                                }}
-                                                className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                        {expandedItems.has(index) ? (
-                                            <ChevronUp className="w-5 h-5 text-gray-400" />
-                                        ) : (
-                                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const newItems = orderItems.filter((_, i) => i !== index);
+                                                setOrderItems(newItems);
+                                            }}
+                                            className="p-2 text-red-500 hover:bg-red-50 rounded-full"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                        {expandedItems.has(index) ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                                     </div>
                                 </div>
 
-                                {/* Item Details (Collapsible) */}
+                                {/* Item Body */}
                                 {expandedItems.has(index) && (
-                                    <div className="p-4 space-y-4 bg-white dark:bg-gray-900">
-                                        {/* Row 1: Name, Type, Quantity */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 space-y-5">
+
+                                        {/* Configuration Row */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="label text-xs">Item Name *</label>
+                                                <label className="label">Item Name (e.g. Red Blouse)</label>
                                                 <input
                                                     type="text"
                                                     value={item.itemName || ""}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = { ...newItems[index], itemName: e.target.value };
-                                                        setOrderItems(newItems);
-                                                    }}
-                                                    className="input"
-                                                    placeholder="e.g., Blouse, Chudidar"
+                                                    onChange={(e) => handleItemChange(index, { itemName: e.target.value })}
+                                                    className="input font-medium"
+                                                    placeholder="Enter item name"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="label text-xs">Garment Type</label>
+                                                <label className="label">Garment Type</label>
                                                 <select
-                                                    value={item.garmentType || garmentType}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = { ...newItems[index], garmentType: e.target.value as GarmentType };
-                                                        setOrderItems(newItems);
-                                                    }}
+                                                    value={item.garmentType}
+                                                    onChange={(e) => handleItemChange(index, { garmentType: e.target.value as GarmentType })}
                                                     className="input"
                                                 >
                                                     <option value="blouse">Blouse</option>
                                                     <option value="chudi">Chudi</option>
                                                     <option value="frock">Frock</option>
                                                     <option value="pavadai_sattai">Pavadai Sattai</option>
+                                                    <option value="aari_blouse">Aari Blouse</option>
                                                     <option value="other">Other</option>
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label className="label text-xs">Quantity</label>
-                                                <input
-                                                    type="number"
-                                                    value={item.quantity || 1}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = { ...newItems[index], quantity: parseInt(e.target.value) || 1 };
-                                                        setOrderItems(newItems);
-                                                    }}
-                                                    className="input"
-                                                    min="1"
-                                                />
-                                            </div>
                                         </div>
 
-                                        {/* Row 2: Costs and Deadline */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="label text-xs">Material Cost (₹)</label>
-                                                <input
-                                                    type="number"
-                                                    value={item.materialCost || ""}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = { ...newItems[index], materialCost: parseFloat(e.target.value) || 0 };
-                                                        setOrderItems(newItems);
-                                                    }}
-                                                    className="input"
-                                                    placeholder="0"
-                                                    min="0"
-                                                />
+                                        {/* PER ITEM: Measurement Mode Toggle */}
+                                        <div>
+                                            <div className="flex p-1 bg-gray-200 dark:bg-gray-700 rounded-lg mb-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleItemChange(index, { measurementType: "measurements" })}
+                                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${item.measurementType === "measurements"
+                                                        ? "bg-white text-indigo-600 shadow-sm"
+                                                        : "text-gray-600 hover:text-gray-800"
+                                                        }`}
+                                                >
+                                                    📏 Measurements
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleItemChange(index, { measurementType: "measurement_garment" })}
+                                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${item.measurementType === "measurement_garment"
+                                                        ? "bg-white text-indigo-600 shadow-sm"
+                                                        : "text-gray-600 hover:text-gray-800"
+                                                        }`}
+                                                >
+                                                    👕 Pattern Garment & Images
+                                                </button>
                                             </div>
+
+                                            {/* CONDITIONAL UI */}
+                                            {item.measurementType === "measurements" ? (
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white dark:bg-gray-800 p-4 rounded-lg border">
+                                                    {MEASUREMENT_FIELDS[item.garmentType || "blouse"]?.map((field) => (
+                                                        <div key={field}>
+                                                            <label className="text-xs text-gray-500 mb-1 block">
+                                                                {MEASUREMENT_LABELS[field] || field}
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={item.measurements?.[field] || ""}
+                                                                onChange={(e) => {
+                                                                    const m = { ...(item.measurements || {}) };
+                                                                    m[field] = e.target.value;
+                                                                    handleItemChange(index, { measurements: m });
+                                                                }}
+                                                                className="input text-sm py-1"
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="bg-indigo-50 dark:bg-indigo-900/20 border-2 border-dashed border-indigo-300 rounded-lg p-6 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <Upload className="w-8 h-8 text-indigo-500 mb-2" />
+                                                        <h4 className="font-semibold text-indigo-900 dark:text-indigo-300">Upload Reference Images</h4>
+                                                        <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-4">
+                                                            Upload pattern garment photos, sketches, or design ideas
+                                                        </p>
+
+                                                        <input
+                                                            type="file"
+                                                            multiple
+                                                            accept="image/*"
+                                                            onChange={(e) => handleFileUpload(index, e.target.files)}
+                                                            className="hidden"
+                                                            id={`file-upload-${index}`}
+                                                        />
+                                                        <label
+                                                            htmlFor={`file-upload-${index}`}
+                                                            className="btn btn-outline cursor-pointer bg-white dark:bg-gray-800"
+                                                        >
+                                                            Select Images
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Image Preview List (Always show if images exist, regardless of mode, but mostly for garment mode) */}
+                                            {item.tempFiles && item.tempFiles.length > 0 && (
+                                                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                                    {item.tempFiles.map((file, fIdx) => (
+                                                        <div key={fIdx} className="relative group bg-white p-2 rounded-lg border shadow-sm">
+                                                            <img src={file.preview} alt="Preview" className="w-full h-24 object-cover rounded" />
+                                                            <input
+                                                                type="text"
+                                                                value={file.title}
+                                                                onChange={(e) => {
+                                                                    const files = [...(item.tempFiles || [])];
+                                                                    files[fIdx].title = e.target.value;
+                                                                    handleItemChange(index, { tempFiles: files });
+                                                                }}
+                                                                className="input text-xs mt-2 border-none bg-gray-50 focus:bg-white"
+                                                                placeholder="Image Title (Required)"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={file.description}
+                                                                onChange={(e) => {
+                                                                    const files = [...(item.tempFiles || [])];
+                                                                    files[fIdx].description = e.target.value;
+                                                                    handleItemChange(index, { tempFiles: files });
+                                                                }}
+                                                                className="input text-xs mt-1 border-none bg-gray-50 focus:bg-white"
+                                                                placeholder="Note involved..."
+                                                            />
+                                                            <button
+                                                                onClick={() => removeFile(index, fIdx)}
+                                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Costs */}
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="label text-xs">Labour Cost (₹)</label>
                                                 <input
                                                     type="number"
                                                     value={item.labourCost || ""}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = { ...newItems[index], labourCost: parseFloat(e.target.value) || 0 };
-                                                        setOrderItems(newItems);
-                                                    }}
+                                                    onChange={(e) => handleItemChange(index, { labourCost: parseFloat(e.target.value) })}
                                                     className="input"
-                                                    placeholder="0"
-                                                    min="0"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="label text-xs">Deadline</label>
+                                                <label className="label text-xs">Material Cost (₹)</label>
                                                 <input
-                                                    type="date"
-                                                    value={item.deadline instanceof Timestamp
-                                                        ? item.deadline.toDate().toISOString().split("T")[0]
-                                                        : dueDate || new Date().toISOString().split("T")[0]}
-                                                    onChange={(e) => {
-                                                        const newItems = [...orderItems];
-                                                        newItems[index] = {
-                                                            ...newItems[index],
-                                                            deadline: Timestamp.fromDate(new Date(e.target.value))
-                                                        };
-                                                        setOrderItems(newItems);
-                                                    }}
+                                                    type="number"
+                                                    value={item.materialCost || ""}
+                                                    onChange={(e) => handleItemChange(index, { materialCost: parseFloat(e.target.value) })}
                                                     className="input"
                                                 />
-                                            </div>
-                                        </div>
-
-                                        {/* Design Notes */}
-                                        <div>
-                                            <label className="label text-xs">Design Notes</label>
-                                            <textarea
-                                                value={item.designNotes || ""}
-                                                onChange={(e) => {
-                                                    const newItems = [...orderItems];
-                                                    newItems[index] = { ...newItems[index], designNotes: e.target.value };
-                                                    setOrderItems(newItems);
-                                                }}
-                                                className="input"
-                                                rows={2}
-                                                placeholder="Special instructions, design requirements..."
-                                            />
-                                        </div>
-
-                                        {/* Item Measurements */}
-                                        <div>
-                                            <label className="label text-xs mb-2">Item Measurements</label>
-                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                                {MEASUREMENT_FIELDS[item.garmentType || garmentType]?.map((field) => (
-                                                    <div key={field}>
-                                                        <label className="text-xs text-gray-500">
-                                                            {MEASUREMENT_LABELS[field] || field}
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={item.measurements?.[field] || ""}
-                                                            onChange={(e) => {
-                                                                const newItems = [...orderItems];
-                                                                newItems[index] = {
-                                                                    ...newItems[index],
-                                                                    measurements: {
-                                                                        ...(newItems[index].measurements || {}),
-                                                                        [field]: e.target.value
-                                                                    }
-                                                                };
-                                                                setOrderItems(newItems);
-                                                            }}
-                                                            className="input text-sm"
-                                                            placeholder="0"
-                                                        />
-                                                    </div>
-                                                ))}
                                             </div>
                                         </div>
                                     </div>
@@ -819,263 +572,23 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             </div>
                         ))}
                     </div>
-
-                    {/* Items Summary */}
-                    {orderItems.length > 0 && (
-                        <div className="mt-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
-                            <p className="text-sm text-indigo-700 dark:text-indigo-300">
-                                <strong>{orderItems.length}</strong> item(s) •
-                                Total Material: <strong>₹{orderItems.reduce((sum, i) => sum + (i.materialCost || 0), 0).toLocaleString()}</strong> •
-                                Total Labour: <strong>₹{orderItems.reduce((sum, i) => sum + (i.labourCost || 0), 0).toLocaleString()}</strong>
-                            </p>
-                        </div>
-                    )}
                 </div>
 
-                {/* Legacy Measurements (for order-level, kept for backwards compatibility) - Only when giving measurements */}
-                {measurementType === "customer_gives" && (
-                    <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Order-Level Measurements</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            {MEASUREMENT_FIELDS[garmentType].map((field) => (
-                                <div key={field}>
-                                    <label className="label text-xs">
-                                        {MEASUREMENT_LABELS[field] || field}
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={measurements[field] || ""}
-                                        onChange={(e) =>
-                                            setMeasurements({ ...measurements, [field]: e.target.value })
-                                        }
-                                        className="input"
-                                        placeholder="0"
-                                    />
-                                </div>
-                            ))}
-                        </div>
+                {/* Submit Section */}
+                <div className="pt-4 border-t sticky bottom-0 bg-white dark:bg-gray-900 pb-4">
+                    <div className="flex justify-between items-center mb-4 text-sm font-medium bg-gray-50 p-3 rounded-lg">
+                        <span>Items: {orderItems.length}</span>
+                        <span>Total Est: ₹{calculateItemsTotals(orderItems as OrderItem[]).totalLabourCost + calculateItemsTotals(orderItems as OrderItem[]).totalMaterialCost}</span>
                     </div>
-                )}
 
-                {/* Planned Materials */}
-                <PlannedMaterialsInput
-                    initialItems={plannedMaterials}
-                    onChange={setPlannedMaterials}
-                    disabled={loading}
-                />
-
-                {/* Workflow Stages */}
-                <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Active Stages</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {["materials", "marking", "cutting", "stitching", "hooks", "ironing", "billing"].map((stage) => (
-                            <button
-                                key={stage}
-                                type="button"
-                                onClick={() => {
-                                    if (activeStages.includes(stage)) {
-                                        setActiveStages(activeStages.filter((s) => s !== stage));
-                                    } else {
-                                        setActiveStages([...activeStages, stage]);
-                                    }
-                                }}
-                                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${activeStages.includes(stage)
-                                    ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-400 text-indigo-800 dark:text-indigo-300"
-                                    : "bg-gray-100 dark:bg-gray-800 border-gray-300 text-gray-600"
-                                    }`}
-                            >
-                                {stage.charAt(0).toUpperCase() + stage.slice(1)}
-                            </button>
-                        ))}
-                    </div>
+                    <button
+                        onClick={handleSubmitForm}
+                        disabled={loading}
+                        className="btn btn-primary w-full py-3 text-lg shadow-lg hover:shadow-xl transition-all"
+                    >
+                        {loading ? "Creating Order..." : "Confirm & Create Workflow Items"}
+                    </button>
                 </div>
-
-                {/* Image Upload Section - Only when measurement_blouse is selected */}
-                {measurementType === "measurement_blouse" && (
-                    <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-900 dark:text-white flex items-center space-x-2">
-                            <Upload className="w-5 h-5" />
-                            <span>Reference Images</span>
-                        </h3>
-
-                        {/* Blouse-Specific Image Sections */}
-                        {garmentType === "blouse" && (
-                            <div className="space-y-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                                <p className="text-sm text-purple-700 dark:text-purple-300 font-medium">Blouse Reference Images</p>
-
-                                {/* Front Neck Image */}
-                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
-                                    <label className="label text-sm">Front Neck Image</label>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            if (e.target.files?.[0]) {
-                                                const file = e.target.files[0];
-                                                setFrontNeckImage({
-                                                    file,
-                                                    preview: URL.createObjectURL(file),
-                                                    description: frontNeckImage.description
-                                                });
-                                            }
-                                        }}
-                                        className="input text-sm"
-                                    />
-                                    {frontNeckImage.preview && (
-                                        <img src={frontNeckImage.preview} alt="Front Neck" className="mt-2 w-24 h-24 object-cover rounded" />
-                                    )}
-                                    <input
-                                        type="text"
-                                        value={frontNeckImage.description}
-                                        onChange={(e) => setFrontNeckImage({ ...frontNeckImage, description: e.target.value })}
-                                        placeholder="Add description (optional)"
-                                        className="input text-sm mt-2"
-                                    />
-                                </div>
-
-                                {/* Back Neck Image */}
-                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
-                                    <label className="label text-sm">Back Neck Image</label>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            if (e.target.files?.[0]) {
-                                                const file = e.target.files[0];
-                                                setBackNeckImage({
-                                                    file,
-                                                    preview: URL.createObjectURL(file),
-                                                    description: backNeckImage.description
-                                                });
-                                            }
-                                        }}
-                                        className="input text-sm"
-                                    />
-                                    {backNeckImage.preview && (
-                                        <img src={backNeckImage.preview} alt="Back Neck" className="mt-2 w-24 h-24 object-cover rounded" />
-                                    )}
-                                    <input
-                                        type="text"
-                                        value={backNeckImage.description}
-                                        onChange={(e) => setBackNeckImage({ ...backNeckImage, description: e.target.value })}
-                                        placeholder="Add description (optional)"
-                                        className="input text-sm mt-2"
-                                    />
-                                </div>
-
-                                {/* Sleeve Image */}
-                                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900">
-                                    <label className="label text-sm">Sleeve Image</label>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            if (e.target.files?.[0]) {
-                                                const file = e.target.files[0];
-                                                setSleeveImage({
-                                                    file,
-                                                    preview: URL.createObjectURL(file),
-                                                    description: sleeveImage.description
-                                                });
-                                            }
-                                        }}
-                                        className="input text-sm"
-                                    />
-                                    {sleeveImage.preview && (
-                                        <img src={sleeveImage.preview} alt="Sleeve" className="mt-2 w-24 h-24 object-cover rounded" />
-                                    )}
-                                    <input
-                                        type="text"
-                                        value={sleeveImage.description}
-                                        onChange={(e) => setSleeveImage({ ...sleeveImage, description: e.target.value })}
-                                        placeholder="Add description (optional)"
-                                        className="input text-sm mt-2"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Additional Reference Images (for all categories) */}
-                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <label className="label flex items-center justify-between">
-                                <span>{garmentType === "blouse" ? "Additional Reference Images" : "Reference Images"} (Max 10)</span>
-                                <span className="text-xs text-gray-500">{imageUploads.length}/10</span>
-                            </label>
-                            <input
-                                type="file"
-                                multiple
-                                accept="image/*"
-                                onChange={(e) => {
-                                    if (e.target.files) {
-                                        const newFiles = Array.from(e.target.files).slice(0, 10 - imageUploads.length);
-                                        const newUploads = newFiles.map(file => ({
-                                            file,
-                                            preview: URL.createObjectURL(file),
-                                            description: ""
-                                        }));
-                                        setImageUploads([...imageUploads, ...newUploads]);
-                                    }
-                                }}
-                                className="input"
-                                disabled={imageUploads.length >= 10}
-                            />
-
-                            {imageUploads.length > 0 && (
-                                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {imageUploads.map((upload, idx) => (
-                                        <div key={idx} className="relative border border-gray-200 dark:border-gray-700 rounded-lg p-2">
-                                            <img
-                                                src={upload.preview}
-                                                alt={`Upload ${idx + 1}`}
-                                                className="w-full h-20 object-cover rounded"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={upload.description}
-                                                onChange={(e) => {
-                                                    const newUploads = [...imageUploads];
-                                                    newUploads[idx] = { ...newUploads[idx], description: e.target.value };
-                                                    setImageUploads(newUploads);
-                                                }}
-                                                placeholder="Description (optional)"
-                                                className="input text-xs mt-1"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    URL.revokeObjectURL(upload.preview);
-                                                    setImageUploads(imageUploads.filter((_, i) => i !== idx));
-                                                }}
-                                                className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Submit Button */}
-                <button
-                    onClick={handleSubmitForm}
-                    disabled={loading || !customerName || !customerPhone || !dueDate || customerPhone.length < 10}
-                    className="w-full btn btn-primary disabled:opacity-50 flex items-center justify-center space-x-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                            <span>Creating Order...</span>
-                        </>
-                    ) : (
-                        <>
-                            <Check className="w-5 h-5" />
-                            <span>Create Order</span>
-                        </>
-                    )}
-                </button>
             </div>
         </div>
     );

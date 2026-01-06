@@ -468,15 +468,30 @@ export interface StitchingTask {
 // MULTI-ITEM WORKFLOW TYPES
 // ============================================
 
-// Item status for workflow progression
+// Multi-item workflow stages matching the User's requirement
+export type WorkflowStage =
+    | "intake"
+    | "materials"
+    | "marking"
+    | "marking_checker"
+    | "cutting"
+    | "cutting_checker"
+    | "aari_work" // If applicable
+    | "stitching"
+    | "stitching_checker"
+    | "hooks"
+    | "ironing"
+    | "billing"
+    | "delivery"
+    | "completed"; // completion state
+
+// Item status for workflow progression (Simplified view)
 export type ItemStatus =
     | "intake"
-    | "cutting"
-    | "stitching"
-    | "finishing"
-    | "qc"
-    | "ready"
-    | "delivered";
+    | "in_progress"
+    | "completed"
+    | "delivered"
+    | "hold";
 
 // Timeline entry for tracking item progress through stages
 export interface ItemTimelineEntry {
@@ -497,35 +512,45 @@ export interface ItemReferenceImage {
 // Measurement type toggle for each item
 export type ItemMeasurementType = "measurements" | "measurement_garment";
 
-// Individual item within an order
+// Individual item within an order - NOW THE PRIMARY WORKFLOW UNIT
 export interface OrderItem {
     itemId: string;
-    itemName: string;           // e.g., "Blouse", "Chudidar", "Lehenga"
-    quantity: number;
-    garmentType?: GarmentType;
-
-    // NEW: Measurement type toggle (per item)
+    orderId: string;            // Reference to parent grouping (Order/Visit)
+    customerId: string;         // Reference to parent Customer
+    customerName: string;       // Denormalized for dashboard display
+    
+    itemName: string;           // e.g., "Blouse", "Chudidar" - user defined name
+    garmentType: GarmentType;   // E.g. blouse, chudi
+    
+    // Workflow State
+    currentStage: WorkflowStage;
+    status: ItemStatus;
+    timeline: ItemTimelineEntry[]; // Detailed history
+    
+    // Assignment
+    handledBy: string;          // Current handler userId
+    handledByName?: string;     // Current handler name
+    dueDate: Timestamp;         // Item-specific due date
+    
+    // New: Measurement type toggle (per item)
     measurementType: ItemMeasurementType;
 
     // If measurementType = "measurements" - manual measurements
     measurements: { [key: string]: number | string };
 
     // If measurementType = "measurement_garment" - reference images with metadata
-    // Can also be string[] for backward compatibility with legacy orders
     referenceImages: ItemReferenceImage[] | string[];
 
     designNotes: string;
     materialCost: number;
     labourCost: number;
-    deadline: Timestamp;
-    status: ItemStatus;
-    handledBy: string;          // Current handler userId
-    handledByName?: string;     // Current handler name
-    timeline: ItemTimelineEntry[];
+    quantity: number;
 
-    // Per-item staff assignment (set by Admin)
-    assignedStaffId?: string;
-    assignedStaffName?: string;
+    // Per-item staff assignment
+    assignedStaff?: AssignedStaff; // Staff assigned to this specific item for each stage
+    
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
 }
 
 // Overall order status based on item completion
@@ -564,44 +589,51 @@ export function getSamplerImageUrl(item: SamplerImageItem): string {
     return item.imageUrl;
 }
 
+// Order is now primarily a Grouping/Visit Container
 export interface Order {
     orderId: string;
     customerId: string;
     customerName: string;
     customerPhone: string;
     customerAddress: string;
-    garmentType: GarmentType;
-    measurements: { [key: string]: number | string };
-    dueDate: Timestamp;
+    
+    // Order-level Dates
     createdAt: Timestamp;
+    dueDate: Timestamp; // Earliest or Latest of items
     confirmedAt: Timestamp | null;
-    // samplerImages supports both old string[] and new object format for backward compatibility
-    samplerImages: SamplerImageItem[];
-    finalProductImages: string[];
-    activeStages: string[];
-    currentStage: string;
-    status: OrderStatus;
-    assignedStaff: AssignedStaff;
-    materialsCostPlanned: number | null;
-    changeHistory: ChangeHistoryEntry[];
-    billing?: OrderBilling;
-    plannedMaterials?: OrderPlannedMaterials | null;
-    materials?: OrderMaterials;
-    // Financial fields
+    
+    // Aggregate Financials
     price?: number;
     advanceAmount?: number;
     labourCost?: number;
     materialCost?: number;
     extraExpenses?: number;
+    
+    // Multi-item fields
+    items?: OrderItem[];         // Array of items in this order (Snapshotted)
+    totalItems?: number;         // Computed: items.length
+    completedItems?: number;     // Computed
+    overallStatus?: OverallOrderStatus;  
+
+    // Legacy fields maintained for backward compatibility or global defaults
+    garmentType?: GarmentType;   // Default for legacy
+    measurements?: { [key: string]: number | string }; // Default for legacy
+    samplerImages: SamplerImageItem[];
+    finalProductImages: string[];
+    activeStages: string[];     // Default active stages for items
+    currentStage: string;       // Derived/Legacy
+    status: OrderStatus;        // Derived/Legacy
+    assignedStaff: AssignedStaff; // Default assignments
+    materialsCostPlanned: number | null;
+    changeHistory: ChangeHistoryEntry[];
+    billing?: OrderBilling;
+    plannedMaterials?: OrderPlannedMaterials | null;
+    materials?: OrderMaterials;
     deliveredAt?: Timestamp;
     designNotes?: string;
     clothType?: string;
-    // Multi-item fields
-    items?: OrderItem[];         // Array of items in this order
-    totalItems?: number;         // Computed: items.length
-    completedItems?: number;     // Computed: items where status = "ready" or "delivered"
-    overallStatus?: OverallOrderStatus;  // Computed from item statuses
-    // Aari Work workflow
+    
+    // Aari Work workflow (Global setting)
     includeAariWork?: boolean;     // For Aari categories - includes Aari Work stage
 
     // Embedded Marking Tasks (Parallel Workflow)

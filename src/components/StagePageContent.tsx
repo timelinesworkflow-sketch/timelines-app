@@ -2,31 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl } from "@/types";
-import { getOrdersForStage, updateOrder, addTimelineEntry, logStaffWork, getNextStage } from "@/lib/orders";
-import { canViewCustomerInfo, getCustomerDisplayName } from "@/lib/privacy";
-import { formatOrderProgress, ITEM_STAGES } from "@/lib/orderItems";
-import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp } from "lucide-react";
+import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl, WorkflowStage, ItemStatus, ItemReferenceImage } from "@/types";
+import { getItemsForStage, updateItemStage, getNextWorkflowStage } from "@/lib/orderItems";
+import { addTimelineEntry, logStaffWork } from "@/lib/orders";
+import { canViewCustomerInfo } from "@/lib/privacy";
+import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import Toast from "@/components/Toast";
-import { Timestamp } from "firebase/firestore";
-import Image from "next/image";
 import MaterialsView from "@/components/MaterialsView";
 
 interface StagePageContentProps {
     stageName: string;
     stageDisplayName: string;
-    /**
-     * Custom content to render for the stage
-     */
-    renderStageContent?: (order: Order) => React.ReactNode;
-    /**
-     * Whether this is a checker stage (shows Approve/Reject instead of Complete)
-     */
+    renderStageContent?: (item: OrderItem) => React.ReactNode;
     isChecker?: boolean;
-    /**
-     * Previous stage to send back to if rejected
-     */
-    previousStage?: string;
+    previousStage?: WorkflowStage;
 }
 
 export default function StagePageContent({
@@ -37,163 +26,110 @@ export default function StagePageContent({
     previousStage,
 }: StagePageContentProps) {
     const { userData } = useAuth();
-    const [orders, setOrders] = useState<Order[]>([]);
+    const [items, setItems] = useState<OrderItem[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
     const [showImageModal, setShowImageModal] = useState<string | null>(null);
-    const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
 
-    // Privacy control - check if user can see customer info
+    // Privacy control
     const canSeeCustomer = userData ? canViewCustomerInfo(userData.role) : false;
 
     useEffect(() => {
-        loadOrders();
-    }, []);
+        loadItems();
+    }, [stageName]);
 
-    const loadOrders = async () => {
+    const loadItems = async () => {
         try {
-            const ordersData = await getOrdersForStage(stageName, userData?.staffId);
-            setOrders(ordersData);
+            const itemsData = await getItemsForStage(stageName, userData?.staffId);
+            setItems(itemsData);
         } catch (error) {
-            console.error("Failed to load orders:", error);
-            setToast({ message: "Failed to load orders", type: "error" });
+            console.error("Failed to load items:", error);
+            setToast({ message: "Failed to load workflow items", type: "error" });
         } finally {
             setLoading(false);
         }
     };
 
-    const currentOrder = orders[currentIndex];
+    const currentItem = items[currentIndex];
 
-    const handleComplete = async () => {
-        if (!currentOrder || !userData) return;
-
+    // Helper for Actions
+    const handleAction = async (actionType: "complete" | "approve" | "reject") => {
+        if (!currentItem || !userData) return;
         setActionLoading(true);
-
         try {
-            const nextStage = getNextStage(stageName, currentOrder.activeStages);
+            let nextStage: WorkflowStage | null = null;
+            let nextStatus: ItemStatus = "in_progress";
 
-            await updateOrder(currentOrder.orderId, {
-                currentStage: nextStage || "completed",
-                status: nextStage ? "in_progress" : "completed",
-            });
+            if (actionType === "reject") {
+                if (!previousStage) throw new Error("No previous stage defined for rejection");
+                nextStage = previousStage;
+                nextStatus = "in_progress"; // Or 'hold'
+            } else {
+                // Complete or Approve -> Move Forward
+                nextStage = getNextWorkflowStage(currentItem.currentStage);
+            }
 
-            await addTimelineEntry(currentOrder.orderId, {
-                staffId: userData.staffId,
-                role: userData.role,
-                stage: stageName,
-                action: "completed",
-            });
+            if (!nextStage) {
+                // Determine if finished
+                if (actionType !== "reject") {
+                    nextStatus = "completed"; // or 'ready'
+                    nextStage = "completed";
+                }
+            }
 
+            // If we are at 'delivery' stage and completing, it's 'delivered'
+            if (currentItem.currentStage === 'delivery' && actionType === 'complete') {
+                nextStatus = "delivered";
+                nextStage = "completed"; // Workflow ends
+            }
+
+            if (!nextStage) throw new Error("Next stage could not be determined");
+
+            await updateItemStage(
+                currentItem.itemId,
+                nextStage,
+                nextStatus,
+                userData.staffId,
+                userData.name || "Staff"
+            );
+
+            // Log global work for salary/auditing
             await logStaffWork({
                 staffId: userData.staffId,
-                firebaseUid: userData.email,
+                firebaseUid: userData.email, // using email as uid per current pattern
                 email: userData.email,
                 role: userData.role,
-                orderId: currentOrder.orderId,
+                orderId: currentItem.orderId,
                 stage: stageName,
-                action: "completed",
+                action: actionType === "reject" ? "checked_reject" : (isChecker ? "checked_ok" : "completed"),
+                // We add itemId implicitly to context if logic changes, but standard log uses orderId
             });
 
-            setToast({ message: "Stage completed successfully!", type: "success" });
+            // Add timeline entry
+            await addTimelineEntry(currentItem.orderId, {
+                staffId: userData.staffId,
+                role: userData.role,
+                stage: stageName,
+                action: actionType === "reject" ? "checked_reject" : (isChecker ? "checked_ok" : "completed"),
+            });
 
-            // Move to next order
-            const newOrders = orders.filter((_, idx) => idx !== currentIndex);
-            setOrders(newOrders);
-            if (currentIndex >= newOrders.length && currentIndex > 0) {
+            setToast({
+                message: actionType === "reject" ? "Item rejected" : "Item completed successfully",
+                type: actionType === "reject" ? "info" : "success"
+            });
+
+            // Remove item from list
+            const newItems = items.filter((_, idx) => idx !== currentIndex);
+            setItems(newItems);
+            if (currentIndex >= newItems.length && currentIndex > 0) {
                 setCurrentIndex(currentIndex - 1);
             }
+
         } catch (error) {
             console.error(error);
-            setToast({ message: "Failed to complete stage", type: "error" });
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const handleApprove = async () => {
-        if (!currentOrder || !userData) return;
-
-        setActionLoading(true);
-
-        try {
-            const nextStage = getNextStage(stageName, currentOrder.activeStages);
-
-            await updateOrder(currentOrder.orderId, {
-                currentStage: nextStage || "completed",
-                status: nextStage ? "in_progress" : "completed",
-            });
-
-            await addTimelineEntry(currentOrder.orderId, {
-                staffId: userData.staffId,
-                role: userData.role,
-                stage: stageName,
-                action: "checked_ok",
-            });
-
-            await logStaffWork({
-                staffId: userData.staffId,
-                firebaseUid: userData.email,
-                email: userData.email,
-                role: userData.role,
-                orderId: currentOrder.orderId,
-                stage: stageName,
-                action: "checked_ok",
-            });
-
-            setToast({ message: "Approved successfully!", type: "success" });
-
-            const newOrders = orders.filter((_, idx) => idx !== currentIndex);
-            setOrders(newOrders);
-            if (currentIndex >= newOrders.length && currentIndex > 0) {
-                setCurrentIndex(currentIndex - 1);
-            }
-        } catch (error) {
-            console.error(error);
-            setToast({ message: "Failed to approve", type: "error" });
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const handleReject = async () => {
-        if (!currentOrder || !userData || !previousStage) return;
-
-        setActionLoading(true);
-
-        try {
-            await updateOrder(currentOrder.orderId, {
-                currentStage: previousStage,
-            });
-
-            await addTimelineEntry(currentOrder.orderId, {
-                staffId: userData.staffId,
-                role: userData.role,
-                stage: stageName,
-                action: "checked_reject",
-            });
-
-            await logStaffWork({
-                staffId: userData.staffId,
-                firebaseUid: userData.email,
-                email: userData.email,
-                role: userData.role,
-                orderId: currentOrder.orderId,
-                stage: stageName,
-                action: "checked_reject",
-            });
-
-            setToast({ message: "Sent back for rework", type: "info" });
-
-            const newOrders = orders.filter((_, idx) => idx !== currentIndex);
-            setOrders(newOrders);
-            if (currentIndex >= newOrders.length && currentIndex > 0) {
-                setCurrentIndex(currentIndex - 1);
-            }
-        } catch (error) {
-            console.error(error);
-            setToast({ message: "Failed to reject", type: "error" });
+            setToast({ message: `Failed to ${actionType}`, type: "error" });
         } finally {
             setActionLoading(false);
         }
@@ -207,16 +143,12 @@ export default function StagePageContent({
         );
     }
 
-    if (orders.length === 0) {
+    if (items.length === 0) {
         return (
             <div className="card text-center py-12">
                 <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    All Caught Up!
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                    No pending orders for {stageDisplayName}
-                </p>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">All Caught Up!</h3>
+                <p className="text-gray-600 dark:text-gray-400">No pending items for {stageDisplayName}</p>
             </div>
         );
     }
@@ -227,242 +159,191 @@ export default function StagePageContent({
 
             {/* Image Modal */}
             {showImageModal && (
-                <div
-                    className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-                    onClick={() => setShowImageModal(null)}
-                >
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowImageModal(null)}>
                     <div className="relative max-w-4xl w-full">
-                        <button
-                            className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 rounded-full p-2"
-                            onClick={() => setShowImageModal(null)}
-                        >
+                        <button className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 rounded-full p-2" onClick={() => setShowImageModal(null)}>
                             <XIcon className="w-6 h-6 text-white" />
                         </button>
-                        <img
-                            src={showImageModal}
-                            alt="Full size"
-                            className="w-full h-auto rounded-lg"
-                        />
+                        <img src={showImageModal} alt="Full size" className="w-full h-auto rounded-lg" />
                     </div>
                 </div>
             )}
 
-            {/* Order Info Card */}
-            <div className="card">
-                <div className="flex items-center justify-between mb-4">
+            {/* Item Card */}
+            <div className="card border-2 border-indigo-50 dark:border-indigo-900/20">
+                {/* Header Info */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-100 dark:border-gray-700 pb-4 mb-4">
                     <div>
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                            {canSeeCustomer
-                                ? `Order - ${currentOrder.customerName}`
-                                : `Order #${currentOrder.orderId.slice(0, 8)}`}
+                        <div className="flex items-center space-x-2 mb-1">
+                            <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                {currentIndex + 1}
+                            </span>
+                            <span className="text-sm text-gray-500 font-medium uppercase tracking-wide">
+                                {currentIndex + 1} of {items.length} Items
+                            </span>
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            {canSeeCustomer ? currentItem.customerName : "Customer"}
+                            <span className="text-gray-300 dark:text-gray-600">/</span>
+                            <span className="text-indigo-600 dark:text-indigo-400">{currentItem.itemName || "Item"}</span>
                         </h2>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {currentIndex + 1} of {orders.length} orders
-                            {currentOrder.items && currentOrder.items.length > 0 && (
-                                <span className="ml-2 text-indigo-600">
-                                    • {formatOrderProgress(currentOrder)}
-                                </span>
-                            )}
+                        <p className="text-sm text-gray-500 mt-1">
+                            ID: <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">{currentItem.itemId}</span>
                         </p>
                     </div>
-                    <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-medium capitalize">
-                        {currentOrder.garmentType.replace(/_/g, " ")}
-                    </span>
+                    <div className="text-right">
+                        <div className="inline-flex flex-col items-end">
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold uppercase mb-1">
+                                {currentItem.garmentType}
+                            </span>
+                            <span className="text-xs text-gray-500 font-medium">
+                                Due: {currentItem.dueDate?.toDate().toLocaleDateString() || "No Date"}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-                    <div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">Due Date</p>
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                            {currentOrder.dueDate.toDate().toLocaleDateString()}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">Order ID</p>
-                        <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                            {currentOrder.orderId.slice(0, 8)}...
-                        </p>
-                    </div>
-                    {currentOrder.items && currentOrder.items.length > 0 && (
+                {/* Content Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                    {/* Left Column: Specifications */}
+                    <div className="space-y-6">
+
+                        {/* Design Design/Specs/Measurements */}
                         <div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">Items</p>
-                            <p className="font-semibold text-gray-900 dark:text-white">
-                                {currentOrder.totalItems || currentOrder.items.length} items
-                            </p>
-                        </div>
-                    )}
-                </div>
+                            <h3 className="font-semibold text-gray-900 dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
+                                {currentItem.measurementType === 'measurement_garment' ? <ImageIcon className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+                                <span>Specification Mode: {currentItem.measurementType === 'measurement_garment' ? 'Pattern Garment' : 'Measurements'}</span>
+                            </h3>
 
-                {/* Reference Images */}
-                {currentOrder.samplerImages.length > 0 && (
-                    <div className="mb-4">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Reference Images
-                        </p>
-                        <div className="flex space-x-2 overflow-x-auto">
-                            {currentOrder.samplerImages.map((url, idx) => {
-                                const imageUrl = getSamplerImageUrl(url);
-                                return (
-                                    <div
-                                        key={idx}
-                                        className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden cursor-pointer hover:opacity-75 transition-opacity"
-                                        onClick={() => setShowImageModal(imageUrl)}
-                                    >
-                                        <img
-                                            src={imageUrl}
-                                            alt={`Reference ${idx + 1}`}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                            <Eye className="w-5 h-5 text-white" />
+                            {currentItem.measurementType === 'measurements' ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {currentItem.measurements && Object.entries(currentItem.measurements).map(([key, value]) => (
+                                        <div key={key} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
+                                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{MEASUREMENT_LABELS[key] || key}</p>
+                                            <p className="font-mono font-semibold text-gray-900 dark:text-white text-lg">{value}</p>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Measurements */}
-                <div>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Measurements
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
-                        {Object.entries(currentOrder.measurements).map(([key, value]) => (
-                            <div key={key} className="bg-gray-50 dark:bg-gray-800 rounded p-2">
-                                <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    {MEASUREMENT_LABELS[key] || key}
-                                </p>
-                                <p className="font-semibold text-gray-900 dark:text-white">{value}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Multi-Item Section */}
-                {currentOrder.items && currentOrder.items.length > 0 && (
-                    <div className="mt-4 border-t pt-4">
-                        <div className="flex items-center space-x-2 mb-3">
-                            <Package className="w-5 h-5 text-indigo-600" />
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Order Items ({currentOrder.items.length})
-                            </p>
-                        </div>
-                        <div className="space-y-2">
-                            {currentOrder.items.map((item: OrderItem, idx: number) => (
-                                <div
-                                    key={item.itemId}
-                                    className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center space-x-3">
-                                            <span className="w-7 h-7 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">
-                                                {idx + 1}
-                                            </span>
-                                            <div>
-                                                <p className="font-medium text-gray-900 dark:text-white text-sm">
-                                                    {item.itemName || `Item ${idx + 1}`}
-                                                </p>
-                                                <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                                    <span className="capitalize">{item.garmentType?.replace(/_/g, " ")}</span>
-                                                    <span>•</span>
-                                                    <span>Qty: {item.quantity}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${item.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
-                                                item.status === 'ready' ? 'bg-green-100 text-green-700' :
-                                                    item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
-                                                        'bg-yellow-100 text-yellow-700'
-                                                }`}>
-                                                {item.status}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Item measurements preview */}
-                                    {item.measurements && Object.keys(item.measurements).length > 0 && (
-                                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                            {Object.entries(item.measurements).slice(0, 4).map(([key, value]) => (
-                                                <span key={key} className="bg-white dark:bg-gray-700 px-2 py-1 rounded">
-                                                    {MEASUREMENT_LABELS[key] || key}: {value}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Design notes */}
-                                    {item.designNotes && (
-                                        <p className="mt-2 text-xs text-gray-500 italic">
-                                            Note: {item.designNotes}
-                                        </p>
+                                    ))}
+                                    {(!currentItem.measurements || Object.keys(currentItem.measurements).length === 0) && (
+                                        <p className="text-gray-500 text-sm italic col-span-full">No measurements recorded.</p>
                                     )}
                                 </div>
-                            ))}
+                            ) : (
+                                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                                    <p className="text-indigo-800 dark:text-indigo-300 font-medium mb-2">Follow Pattern Garment</p>
+                                    <p className="text-sm text-indigo-600 dark:text-indigo-400">
+                                        Refer to the attached images for pattern and design details.
+                                    </p>
+                                </div>
+                            )}
                         </div>
+
+                        {/* Design Notes */}
+                        {currentItem.designNotes && (
+                            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-100 dark:border-amber-800">
+                                <h4 className="text-amber-800 dark:text-amber-300 font-bold text-xs uppercase mb-2">Design Notes</h4>
+                                <p className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed">{currentItem.designNotes}</p>
+                            </div>
+                        )}
+
+                        {/* Custom Stage Content Injection */}
+                        {renderStageContent && (
+                            <div className="pt-4 border-t">
+                                {renderStageContent(currentItem)}
+                            </div>
+                        )}
                     </div>
-                )}
 
-                {/* Materials View (Read-only for non-materials stages) */}
-                {currentOrder.materials && (
-                    <MaterialsView order={currentOrder} />
-                )}
+                    {/* Right Column: Reference Images */}
+                    <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
+                            <Eye className="w-4 h-4" />
+                            <span>Reference Images ({Array.isArray(currentItem.referenceImages) ? currentItem.referenceImages.length : 0})</span>
+                        </h3>
 
-                {/* Custom Stage Content */}
-                {renderStageContent && (
-                    <div className="mt-4">{renderStageContent(currentOrder)}</div>
-                )}
+                        {(Array.isArray(currentItem.referenceImages) && currentItem.referenceImages.length > 0) ? (
+                            <div className="grid grid-cols-2 gap-3">
+                                {currentItem.referenceImages.map((img, idx) => {
+                                    // Handle both string URLs (legacy) and object (new)
+                                    const url = typeof img === 'string' ? img : img.imageUrl;
+                                    const title = typeof img === 'string' ? `Image ${idx + 1}` : img.title;
+                                    const desc = typeof img === 'string' ? null : img.description;
+
+                                    return (
+                                        <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer shadow-sm hover:shadow-md transition-shadow" onClick={() => setShowImageModal(url)}>
+                                            <img src={url} alt={title} className="w-full h-40 object-cover" />
+                                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                                                <p className="text-white text-xs font-medium truncate">{title}</p>
+                                                {desc && <p className="text-gray-300 text-[10px] truncate">{desc}</p>}
+                                            </div>
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                <Eye className="w-8 h-8 text-white drop-shadow-md" />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                                <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">No reference images attached.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Navigation & Actions */}
-            <div className="flex items-center justify-between space-x-4">
+            <div className="flex items-center justify-between">
                 <button
                     onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
                     disabled={currentIndex === 0}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Previous</span>
+                    <span className="hidden sm:inline">Previous Item</span>
                 </button>
 
                 {isChecker ? (
                     <div className="flex space-x-3">
                         <button
-                            onClick={handleReject}
+                            onClick={() => handleAction("reject")}
                             disabled={actionLoading}
-                            className="btn btn-danger flex items-center space-x-2"
+                            className="btn btn-danger flex items-center space-x-2 px-6"
                         >
                             <XIcon className="w-5 h-5" />
-                            <span>Reject</span>
+                            <span>Reject Item</span>
                         </button>
                         <button
-                            onClick={handleApprove}
+                            onClick={() => handleAction("approve")}
                             disabled={actionLoading}
-                            className="btn bg-green-600 text-white hover:bg-green-700 flex items-center space-x-2"
+                            className="btn bg-green-600 text-white hover:bg-green-700 flex items-center space-x-2 px-6"
                         >
                             <Check className="w-5 h-5" />
-                            <span>Approve</span>
+                            <span>Approve Item</span>
                         </button>
                     </div>
                 ) : (
                     <button
-                        onClick={handleComplete}
+                        onClick={() => handleAction("complete")}
                         disabled={actionLoading}
-                        className="btn btn-primary flex items-center space-x-2"
+                        className="btn btn-primary flex items-center space-x-2 px-6 shadow-lg shadow-indigo-500/30"
                     >
-                        <Check className="w-5 h-5" />
-                        <span>{actionLoading ? "Completing..." : `Complete ${stageDisplayName}`}</span>
+                        {actionLoading ? (
+                            <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        ) : (
+                            <Check className="w-5 h-5" />
+                        )}
+                        <span>Complete Stage for Item</span>
                     </button>
                 )}
 
                 <button
-                    onClick={() => setCurrentIndex(Math.min(orders.length - 1, currentIndex + 1))}
-                    disabled={currentIndex === orders.length - 1}
+                    onClick={() => setCurrentIndex(Math.min(items.length - 1, currentIndex + 1))}
+                    disabled={currentIndex === items.length - 1}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                    <span>Next</span>
+                    <span className="hidden sm:inline">Next Item</span>
                     <ArrowRight className="w-4 h-4" />
                 </button>
             </div>
