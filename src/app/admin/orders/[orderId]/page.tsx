@@ -6,7 +6,7 @@ import TopBar from "@/components/TopBar";
 import { useParams } from "next/navigation";
 import { doc, getDoc, collection, getDocs, query, orderBy as firestoreOrderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, OrderItem, TimelineEntry, STAGE_DISPLAY_NAMES, MEASUREMENT_LABELS } from "@/types";
+import { Order, OrderItem, TimelineEntry, STAGE_DISPLAY_NAMES, MEASUREMENT_LABELS, getGarmentDisplayName } from "@/types";
 import { formatOrderProgress } from "@/lib/orderItems";
 import { ArrowLeft, Package, User, Calendar, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
@@ -99,7 +99,7 @@ export default function OrderDetailPage() {
                                 <div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Garment Type</p>
                                     <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                                        {order.garmentType?.replace(/_/g, " ") || '—'}
+                                        {getGarmentDisplayName(order)}
                                     </p>
                                 </div>
                                 <div>
@@ -166,7 +166,7 @@ export default function OrderDetailPage() {
                                                             {item.itemName || `Item ${idx + 1}`}
                                                         </p>
                                                         <p className="text-xs text-gray-500">
-                                                            {item.garmentType?.replace(/_/g, " ") || order.garmentType?.replace(/_/g, " ")} • Qty: {item.quantity}
+                                                            {getGarmentDisplayName(item)} • Qty: {item.quantity}
                                                         </p>
                                                     </div>
                                                 </div>

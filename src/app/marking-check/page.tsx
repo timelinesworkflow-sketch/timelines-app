@@ -5,7 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, MarkingTask, User } from "@/types";
+import { Order, MarkingTask, User, getGarmentDisplayName } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     getAllPendingMarkingTasks,
@@ -359,7 +359,7 @@ export default function MarkingCheckPage() {
                                                         </div>
                                                         <div className="flex items-center gap-3 mt-1 text-sm">
                                                             <span className="text-slate-400 capitalize">
-                                                                {order?.garmentType?.replace(/_/g, " ") || "Unknown"}
+                                                                {getGarmentDisplayName(order)}
                                                             </span>
                                                             <span className={`flex items-center gap-1 ${dueStatus.color}`}>
                                                                 <Calendar className="w-3 h-3" />

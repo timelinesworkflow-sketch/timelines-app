@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl, WorkflowStage, ItemStatus, ItemReferenceImage } from "@/types";
+import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl, WorkflowStage, ItemStatus, ItemReferenceImage, getGarmentDisplayName } from "@/types";
 import { getItemsForStage, updateItemStage, getNextWorkflowStage } from "@/lib/orderItems";
 import { addTimelineEntry, logStaffWork } from "@/lib/orders";
 import { canViewCustomerInfo } from "@/lib/privacy";
@@ -200,7 +200,7 @@ export default function StagePageContent({
                     <div className="text-right">
                         <div className="inline-flex flex-col items-end">
                             <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold uppercase mb-1">
-                                {currentItem.garmentType}
+                                {getGarmentDisplayName(currentItem)}
                             </span>
                             <span className="text-xs text-gray-500 font-medium">
                                 Due: {currentItem.dueDate?.toDate().toLocaleDateString() || "No Date"}

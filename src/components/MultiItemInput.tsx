@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { OrderItem, GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, ItemStatus } from "@/types";
+import { OrderItem, GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, ItemStatus, getGarmentDisplayName } from "@/types";
 import { createEmptyItem } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
 import { Plus, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
@@ -96,7 +96,7 @@ export default function MultiItemInput({
                                         {item.itemName || `Item ${index + 1}`}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                        {item.garmentType?.replace(/_/g, " ") || "No type"} • Qty: {item.quantity || 1}
+                                        {getGarmentDisplayName(item)} • Qty: {item.quantity || 1}
                                     </p>
                                 </div>
                             </div>
@@ -152,6 +152,20 @@ export default function MultiItemInput({
                                             <option value="pavadai_sattai">Pavadai Sattai</option>
                                             <option value="other">Other</option>
                                         </select>
+                                        {item.garmentType === "other" && (
+                                            <div className="mt-2 text-indigo-700 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <label className="text-[10px] font-bold uppercase mb-1 block">Specify Garment Name *</label>
+                                                <input
+                                                    type="text"
+                                                    value={item.customGarmentName || ""}
+                                                    onChange={(e) => updateItem(index, { customGarmentName: e.target.value })}
+                                                    className="input text-sm py-1.5"
+                                                    placeholder="e.g. Alteration"
+                                                    required
+                                                    disabled={disabled}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="label">Quantity</label>

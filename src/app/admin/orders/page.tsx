@@ -5,7 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, User } from "@/types";
+import { Order, User, getGarmentDisplayName } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { bulkAssignItems } from "@/lib/assignments";
 import Link from "next/link";
@@ -243,7 +243,7 @@ export default function AdminOrdersPage() {
 
                                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 dark:text-gray-400">
                                                         <p>{order.customerPhone}</p>
-                                                        <p className="capitalize">{order.garmentType?.replace(/_/g, " ") || '—'}</p>
+                                                        <p className="capitalize">{getGarmentDisplayName(order)}</p>
                                                         <p>Due: {order.dueDate.toDate().toLocaleDateString()}</p>
                                                     </div>
 

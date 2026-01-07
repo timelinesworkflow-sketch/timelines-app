@@ -549,6 +549,8 @@ export interface OrderItem {
     labourCost: number;
     quantity: number;
 
+    customGarmentName?: string; // Field for when garmentType is "other"
+
     // Per-item staff assignment
     assignedStaff?: AssignedStaff; // Staff assigned to this specific item for each stage
 
@@ -595,6 +597,15 @@ export function getSamplerImageUrl(item: SamplerImageItem): string {
     return item.imageUrl;
 }
 
+// Helper to get garment display name across all stages
+export function getGarmentDisplayName(item: { garmentType?: GarmentType | string; customGarmentName?: string } | undefined | null): string {
+    if (!item) return "Unknown";
+    if (item.garmentType === "other" && item.customGarmentName) {
+        return item.customGarmentName;
+    }
+    return (item.garmentType || "Unknown").replace(/_/g, " ").toUpperCase();
+}
+
 // Order is now primarily a Grouping/Visit Container
 export interface Order {
     orderId: string;
@@ -638,6 +649,7 @@ export interface Order {
     deliveredAt?: Timestamp;
     designNotes?: string;
     clothType?: string;
+    customGarmentName?: string; // Legacy/Global default
 
     // Aari Work workflow (Global setting)
     includeAariWork?: boolean;     // For Aari categories - includes Aari Work stage

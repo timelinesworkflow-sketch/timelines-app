@@ -5,7 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, MarkingTask, User } from "@/types";
+import { Order, MarkingTask, User, getGarmentDisplayName } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     getMarkingTasksForStaff,
@@ -261,7 +261,7 @@ export default function MarkingPage() {
                                                         </div>
                                                         <div className="flex items-center gap-3 mt-1 text-sm">
                                                             <span className="text-slate-400 capitalize">
-                                                                {order?.garmentType?.replace(/_/g, " ") || "Unknown"}
+                                                                {getGarmentDisplayName(order)}
                                                             </span>
                                                             <span className={`flex items-center gap-1 ${dueStatus.color}`}>
                                                                 <Calendar className="w-3 h-3" />
@@ -288,8 +288,8 @@ export default function MarkingPage() {
                                                         <div
                                                             key={task.taskId}
                                                             className={`border rounded-xl p-3 ${task.status === "needs_rework"
-                                                                    ? "border-red-700 bg-red-900/20"
-                                                                    : "border-slate-600 bg-slate-750"
+                                                                ? "border-red-700 bg-red-900/20"
+                                                                : "border-slate-600 bg-slate-750"
                                                                 }`}
                                                         >
                                                             {/* Task Header */}

@@ -9,7 +9,7 @@ import TopBar from "@/components/TopBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, OrderBilling, BillLineItem, BILL_PARTICULARS, BillStatus } from "@/types";
+import { Order, OrderBilling, BillLineItem, BILL_PARTICULARS, BillStatus, getGarmentDisplayName } from "@/types";
 import {
     Calculator,
     DollarSign,
@@ -413,7 +413,7 @@ export default function BillingPage() {
                                                     )}
                                                 </div>
                                                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {order.customerPhone} • {order.garmentType?.replace(/_/g, " ") || '—'}
+                                                    {order.customerPhone} • {getGarmentDisplayName(order)}
                                                 </p>
                                                 {order.billing && (
                                                     <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1">
@@ -485,7 +485,7 @@ export default function BillingPage() {
                                     <div>
                                         <p className="text-gray-600 dark:text-gray-400">Garment</p>
                                         <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                                            {selectedOrder.garmentType?.replace(/_/g, " ") || '—'}
+                                            {getGarmentDisplayName(selectedOrder)}
                                         </p>
                                     </div>
                                     <div>

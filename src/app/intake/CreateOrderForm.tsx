@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, OrderItem, ItemReferenceImage } from "@/types";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, OrderItem, ItemReferenceImage, getGarmentDisplayName } from "@/types";
 import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder } from "@/lib/customers";
 import { uploadImages } from "@/lib/storage";
@@ -25,6 +25,7 @@ type LocalOrderItem = Partial<OrderItem> & {
         sketchFile?: File; // Secondary image explaining the main one
         sketchPreview?: string;
     }[];
+    customGarmentName?: string;
 };
 
 export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
@@ -141,6 +142,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     const validateItem = (item: LocalOrderItem): boolean => {
         if (!item.garmentType) return false;
+        if (item.garmentType === "other" && !item.customGarmentName?.trim()) return false;
 
         if (item.measurementType === 'measurements') {
             const fields = MEASUREMENT_FIELDS[item.garmentType || "blouse"];
@@ -239,7 +241,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     status: "in_progress",
                     customerName,
                     customerId: customerPhone,
-                    currentStage: "materials" // Initial stage after entry as per standard flow
+                    currentStage: "materials", // Initial stage after entry as per standard flow
+                    customGarmentName: item.garmentType === "other" ? item.customGarmentName : undefined
                 } as OrderItem);
             }
 
@@ -450,7 +453,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 {item.itemName || `Item ${index + 1}`}
                                             </p>
                                             <p className="text-sm text-gray-500 font-medium">
-                                                {item.garmentType?.replace(/_/g, " ").toUpperCase()} • {item.measurementType === 'measurement_garment' ? 'Pattern Garment' : 'Measurements'}
+                                                {getGarmentDisplayName(item)} • {item.measurementType === 'measurement_garment' ? 'Pattern Garment' : 'Measurements'}
                                             </p>
                                         </div>
                                     </div>
@@ -513,6 +516,19 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                         <Info className="w-3 h-3 mr-1" />
                                                         AARI Stage will be included automatically.
                                                     </p>
+                                                )}
+                                                {item.garmentType === "other" && (
+                                                    <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                        <label className="label text-indigo-700 font-bold">Specify Garment Name *</label>
+                                                        <input
+                                                            type="text"
+                                                            value={item.customGarmentName || ""}
+                                                            onChange={(e) => handleItemChange(index, { customGarmentName: e.target.value })}
+                                                            className="input border-indigo-200 focus:border-indigo-500 font-medium"
+                                                            placeholder="e.g. Saree Draping, Alteration"
+                                                            required
+                                                        />
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>

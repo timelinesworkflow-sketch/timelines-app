@@ -8,7 +8,8 @@ import {
     MaterialPurchase,
     PlannedMaterial,
     PlannedMaterialWithStatus,
-    OrderPlannedMaterials
+    OrderPlannedMaterials,
+    getGarmentDisplayName
 } from "@/types";
 import {
     getAllInventory as getInventory,
@@ -324,7 +325,7 @@ export default function MaterialsPage() {
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded uppercase">
-                                                        {item.garmentType?.replace(/_/g, " ") || '—'}
+                                                        {getGarmentDisplayName(item)}
                                                     </span>
                                                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
                                                         {item.itemName || "Unnamed Item"}

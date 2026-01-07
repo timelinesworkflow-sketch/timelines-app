@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, PlannedMaterial } from "@/types";
+import { Order, PlannedMaterial, getGarmentDisplayName } from "@/types";
 import { updateOrder } from "@/lib/orders";
 import { canEditOrder } from "@/lib/customers";
 import { useAuth } from "@/contexts/AuthContext";
@@ -401,7 +401,7 @@ export default function OrdersList() {
                                 {order.items && order.items.length > 0 && (
                                     <span className="flex items-center gap-1 text-indigo-600">
                                         <List className="w-3 h-3" />
-                                        {order.items.map(i => i.garmentType).join(", ")}
+                                        {order.items.map(i => getGarmentDisplayName(i)).join(", ")}
                                     </span>
                                 )}
                             </div>
