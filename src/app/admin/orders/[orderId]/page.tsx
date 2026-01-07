@@ -99,7 +99,7 @@ export default function OrderDetailPage() {
                                 <div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Garment Type</p>
                                     <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                                        {order.garmentType.replace(/_/g, " ")}
+                                        {order.garmentType?.replace(/_/g, " ") || '—'}
                                     </p>
                                 </div>
                                 <div>
@@ -172,8 +172,8 @@ export default function OrderDetailPage() {
                                                 </div>
                                                 <div className="flex items-center space-x-3">
                                                     <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${item.status === 'delivered' ? 'bg-blue-100 text-blue-700' :
-                                                        item.status === 'ready' ? 'bg-green-100 text-green-700' :
-                                                            item.status === 'qc' ? 'bg-purple-100 text-purple-700' :
+                                                        item.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                            item.status === 'in_progress' ? 'bg-purple-100 text-purple-700' :
                                                                 'bg-yellow-100 text-yellow-700'
                                                         }`}>
                                                         {item.status}
@@ -201,7 +201,7 @@ export default function OrderDetailPage() {
                                                         </div>
                                                         <div>
                                                             <p className="text-xs text-gray-500">Deadline</p>
-                                                            <p className="font-medium">{item.deadline?.toDate().toLocaleDateString() || 'N/A'}</p>
+                                                            <p className="font-medium">{item.dueDate?.toDate().toLocaleDateString() || 'N/A'}</p>
                                                         </div>
                                                         <div>
                                                             <p className="text-xs text-gray-500">Handled By</p>

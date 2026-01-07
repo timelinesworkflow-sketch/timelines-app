@@ -193,14 +193,14 @@ export default function MultiItemInput({
                                         />
                                     </div>
                                     <div>
-                                        <label className="label">Deadline</label>
+                                        <label className="label">Due Date</label>
                                         <input
                                             type="date"
-                                            value={item.deadline instanceof Timestamp
-                                                ? item.deadline.toDate().toISOString().split("T")[0]
+                                            value={item.dueDate instanceof Timestamp
+                                                ? item.dueDate.toDate().toISOString().split("T")[0]
                                                 : new Date().toISOString().split("T")[0]}
                                             onChange={(e) => updateItem(index, {
-                                                deadline: Timestamp.fromDate(new Date(e.target.value))
+                                                dueDate: Timestamp.fromDate(new Date(e.target.value))
                                             })}
                                             className="input"
                                             disabled={disabled}

@@ -413,7 +413,7 @@ export default function BillingPage() {
                                                     )}
                                                 </div>
                                                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {order.customerPhone} • {order.garmentType.replace(/_/g, " ")}
+                                                    {order.customerPhone} • {order.garmentType?.replace(/_/g, " ") || '—'}
                                                 </p>
                                                 {order.billing && (
                                                     <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1">
@@ -485,7 +485,7 @@ export default function BillingPage() {
                                     <div>
                                         <p className="text-gray-600 dark:text-gray-400">Garment</p>
                                         <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                                            {selectedOrder.garmentType.replace(/_/g, " ")}
+                                            {selectedOrder.garmentType?.replace(/_/g, " ") || '—'}
                                         </p>
                                     </div>
                                     <div>

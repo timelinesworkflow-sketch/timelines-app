@@ -8,7 +8,7 @@ import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder
 import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone } from "lucide-react";
+import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info } from "lucide-react";
 import Toast from "@/components/Toast";
 
 interface CreateOrderFormProps {
@@ -522,8 +522,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 type="button"
                                                 onClick={() => handleItemChange(index, { measurementType: "measurements" })}
                                                 className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurements"
-                                                        ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
-                                                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                                                    ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
+                                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
                                                     }`}
                                             >
                                                 Customer Gives Measurements
@@ -532,8 +532,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 type="button"
                                                 onClick={() => handleItemChange(index, { measurementType: "measurement_garment" })}
                                                 className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurement_garment"
-                                                        ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
-                                                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                                                    ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
+                                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
                                                     }`}
                                             >
                                                 Customer Gives Pattern Garment
@@ -654,8 +654,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 {/* Add Image Button - Only if previous images are valid */}
                                                 <div
                                                     className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer group ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                            ? "border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 bg-indigo-50/30"
-                                                            : "border-gray-200 bg-gray-50 cursor-not-allowed opacity-60"
+                                                        ? "border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 bg-indigo-50/30"
+                                                        : "border-gray-200 bg-gray-50 cursor-not-allowed opacity-60"
                                                         }`}
                                                     onClick={() => addImageSlot(index)}
                                                 >
@@ -668,14 +668,14 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                     />
                                                     <div className="flex flex-col items-center justify-center w-full">
                                                         <div className={`p-3 rounded-full mb-3 transition-colors ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                                ? "bg-indigo-100 text-indigo-500 group-hover:bg-indigo-200 group-hover:text-indigo-700"
-                                                                : "bg-gray-200 text-gray-400"
+                                                            ? "bg-indigo-100 text-indigo-500 group-hover:bg-indigo-200 group-hover:text-indigo-700"
+                                                            : "bg-gray-200 text-gray-400"
                                                             }`}>
                                                             <Upload className="w-6 h-6" />
                                                         </div>
                                                         <span className={`font-semibold text-sm ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                                ? "text-indigo-700 underline decoration-dashed underline-offset-4"
-                                                                : "text-gray-500"
+                                                            ? "text-indigo-700 underline decoration-dashed underline-offset-4"
+                                                            : "text-gray-500"
                                                             }`}>
                                                             {(!item.tempFiles || item.tempFiles.length === 0) ? "Upload Item Photo" : "+ Add Next Image"}
                                                         </span>

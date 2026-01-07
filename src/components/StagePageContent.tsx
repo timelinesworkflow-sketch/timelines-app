@@ -16,6 +16,7 @@ interface StagePageContentProps {
     renderStageContent?: (item: OrderItem) => React.ReactNode;
     isChecker?: boolean;
     previousStage?: WorkflowStage;
+    children?: React.ReactNode;
 }
 
 export default function StagePageContent({
@@ -24,6 +25,7 @@ export default function StagePageContent({
     renderStageContent,
     isChecker = false,
     previousStage,
+    children,
 }: StagePageContentProps) {
     const { userData } = useAuth();
     const [items, setItems] = useState<OrderItem[]>([]);
@@ -145,10 +147,13 @@ export default function StagePageContent({
 
     if (items.length === 0) {
         return (
-            <div className="card text-center py-12">
-                <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">All Caught Up!</h3>
-                <p className="text-gray-600 dark:text-gray-400">No pending items for {stageDisplayName}</p>
+            <div className="space-y-6">
+                {children}
+                <div className="card text-center py-12">
+                    <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">All Caught Up!</h3>
+                    <p className="text-gray-600 dark:text-gray-400">No pending items for {stageDisplayName}</p>
+                </div>
             </div>
         );
     }
@@ -156,6 +161,7 @@ export default function StagePageContent({
     return (
         <div className="space-y-6">
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+            {children}
 
             {/* Image Modal */}
             {showImageModal && (

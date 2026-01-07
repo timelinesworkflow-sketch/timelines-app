@@ -302,7 +302,7 @@ export default function PurchasePageContent() {
                                                         <span className="font-mono">{purchase.orderId.slice(0, 8)}...</span>
                                                         {purchase.garmentType && (
                                                             <span className="ml-2 text-gray-500">
-                                                                ({purchase.garmentType.replace(/_/g, " ")})
+                                                                ({purchase.garmentType?.replace(/_/g, " ") || '—'})
                                                             </span>
                                                         )}
                                                     </div>

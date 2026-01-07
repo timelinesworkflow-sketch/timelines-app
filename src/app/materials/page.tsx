@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/contexts/AuthContext";
 import {
     OrderItem,
     InventoryItem,
@@ -40,7 +40,7 @@ import StagePageContent from "@/components/StagePageContent";
 import PlannedMaterialsInput from "@/components/PlannedMaterialsInput";
 
 export default function MaterialsPage() {
-    const { user, userProfile } = useAuth();
+    const { user, userData } = useAuth();
     const [items, setItems] = useState<OrderItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -81,7 +81,7 @@ export default function MaterialsPage() {
             const plannedMaterialsData: OrderPlannedMaterials = {
                 items: materials,
                 plannedByStaffId: user!.uid,
-                plannedByStaffName: userProfile?.name || "Unknown",
+                plannedByStaffName: userData?.name || "Unknown",
                 plannedAt: Timestamp.now()
             };
 
@@ -147,7 +147,7 @@ export default function MaterialsPage() {
                         meter: deductLength,
                         totalLength: deductLength,
                         laborStaffId: user!.uid,
-                        laborStaffName: userProfile?.name || "Unknown",
+                        laborStaffName: userData?.name || "Unknown",
                         createdAt: Timestamp.now()
                     } as any);
                 }
@@ -161,7 +161,7 @@ export default function MaterialsPage() {
                     nextStage,
                     "in_progress", // Next stage triggers default status
                     user!.uid,
-                    userProfile?.name || "Unknown"
+                    userData?.name || "Unknown"
                 );
 
                 toast.success(`Item moved to ${nextStage}`);
@@ -173,7 +173,7 @@ export default function MaterialsPage() {
                     "completed",
                     "completed",
                     user!.uid,
-                    userProfile?.name || "Unknown"
+                    userData?.name || "Unknown"
                 );
                 setItems(prev => prev.filter(i => i.itemId !== item.itemId));
             }
@@ -194,7 +194,7 @@ export default function MaterialsPage() {
                 unit: material.unit,
                 dueDate: item.dueDate?.toDate() || new Date(),
                 requestedByStaffId: user!.uid,
-                requestedByStaffName: userProfile?.name || "Unknown",
+                requestedByStaffName: userData?.name || "Unknown",
                 requestedByRole: "materials",
                 purchaseType: "order",
                 sourceStage: "materials",
@@ -324,7 +324,7 @@ export default function MaterialsPage() {
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="px-2 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded uppercase">
-                                                        {item.garmentType.replace(/_/g, " ")}
+                                                        {item.garmentType?.replace(/_/g, " ") || '—'}
                                                     </span>
                                                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
                                                         {item.itemName || "Unnamed Item"}
@@ -373,9 +373,9 @@ export default function MaterialsPage() {
                                                 </h4>
 
                                                 <PlannedMaterialsInput
-                                                    initialMaterials={item.plannedMaterials?.items || []}
+                                                    initialItems={item.plannedMaterials?.items || []}
                                                     onChange={(m) => handleUpdatePlannedMaterials(item.itemId, m)}
-                                                    readOnly={false}
+                                                    disabled={false}
                                                 />
                                             </div>
 

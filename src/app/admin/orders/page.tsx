@@ -243,7 +243,7 @@ export default function AdminOrdersPage() {
 
                                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600 dark:text-gray-400">
                                                         <p>{order.customerPhone}</p>
-                                                        <p className="capitalize">{order.garmentType.replace(/_/g, " ")}</p>
+                                                        <p className="capitalize">{order.garmentType?.replace(/_/g, " ") || '—'}</p>
                                                         <p>Due: {order.dueDate.toDate().toLocaleDateString()}</p>
                                                     </div>
 

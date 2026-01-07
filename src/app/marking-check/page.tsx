@@ -217,8 +217,8 @@ export default function MarkingCheckPage() {
                 status: nextStage ? "in_progress" : "completed",
             });
 
-            // Generate cutting tasks if next stage is cutting
-            if (nextStage === "cutting") {
+            // Generate cutting tasks if next stage is cutting and garmentType is defined
+            if (nextStage === "cutting" && order.garmentType) {
                 // Safety: check if cutting tasks already exist
                 const existingCuttingTasks = await getCuttingTasksForOrder(orderId);
                 if (!existingCuttingTasks || existingCuttingTasks.length === 0) {

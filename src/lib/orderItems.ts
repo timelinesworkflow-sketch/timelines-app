@@ -77,6 +77,7 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         status: "intake",
         handledBy: "",
         handledByName: "",
+        dueDate: Timestamp.now(),
         timeline: [],
     };
 }

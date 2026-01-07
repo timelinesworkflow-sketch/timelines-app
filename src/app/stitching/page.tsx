@@ -75,8 +75,8 @@ export default function StitchingPage() {
             for (const order of orders) {
                 let tasks = await getStitchingTasksForOrder(order.orderId);
 
-                // Generate tasks if none exist
-                if (tasks.length === 0) {
+                // Generate tasks if none exist and garmentType is defined
+                if (tasks.length === 0 && order.garmentType) {
                     tasks = await generateStitchingTasksForOrder(order.orderId, order.garmentType);
                 }
 

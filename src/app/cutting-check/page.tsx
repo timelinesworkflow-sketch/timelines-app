@@ -73,8 +73,8 @@ export default function CuttingCheckPage() {
             for (const order of orders) {
                 let tasks = await getCuttingTasksForOrder(order.orderId);
 
-                // Generate tasks if none exist
-                if (tasks.length === 0) {
+                // Generate tasks if none exist and garmentType is defined
+                if (tasks.length === 0 && order.garmentType) {
                     tasks = await generateCuttingTasksForOrder(order.orderId, order.garmentType);
                 }
 
@@ -180,8 +180,7 @@ export default function CuttingCheckPage() {
                 status: nextStage ? "in_progress" : "completed",
             });
 
-            // Generate stitching tasks if next stage is stitching
-            if (nextStage === "stitching") {
+            if (nextStage === "stitching" && orderData.order.garmentType) {
                 // Safety: check if stitching tasks already exist
                 const existingStitchingTasks = await getStitchingTasksForOrder(orderId);
                 if (!existingStitchingTasks || existingStitchingTasks.length === 0) {
@@ -323,7 +322,7 @@ export default function CuttingCheckPage() {
                                                         </div>
                                                         <div className="flex items-center gap-3 mt-1 text-sm">
                                                             <span className="text-slate-400 capitalize">
-                                                                {order.garmentType.replace(/_/g, " ")}
+                                                                {order.garmentType?.replace(/_/g, " ") || '—'}
                                                             </span>
                                                             <span className={`flex items-center gap-1 ${dueStatus.color}`}>
                                                                 <Calendar className="w-3 h-3" />

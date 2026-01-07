@@ -437,7 +437,7 @@ export default function CustomerManagementPage() {
                                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
                                                         <div>
                                                             <p className="text-xs text-gray-500 uppercase">Garment</p>
-                                                            <p className="font-medium capitalize">{order.garmentType.replace(/_/g, " ")}</p>
+                                                            <p className="font-medium capitalize">{order.garmentType?.replace(/_/g, " ") || '—'}</p>
                                                         </div>
                                                         <div>
                                                             <p className="text-xs text-gray-500 uppercase">Intake Date</p>
