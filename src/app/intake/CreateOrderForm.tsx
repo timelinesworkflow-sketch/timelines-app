@@ -22,8 +22,8 @@ type LocalOrderItem = Partial<OrderItem> & {
         preview: string;
         description: string;
         title: string;
-        descriptionImageFile?: File; // Secondary image explaining the main one
-        descriptionImagePreview?: string;
+        sketchFile?: File; // Secondary image explaining the main one
+        sketchPreview?: string;
     }[];
 };
 
@@ -47,6 +47,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     // Multi-item state
     const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([createEmptyItem(1, "blouse")]);
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
+    const [previewModal, setPreviewModal] = useState<string | null>(null);
 
     // Customer order history lookup
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
@@ -106,22 +107,22 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             preview: URL.createObjectURL(file),
             description: "",
             title: "", // Must be filled by user
-            descriptionImageFile: undefined,
-            descriptionImagePreview: undefined
+            sketchFile: undefined,
+            sketchPreview: undefined
         };
 
         const currentFiles = orderItems[index].tempFiles || [];
         handleItemChange(index, { tempFiles: [...currentFiles, newItem] });
     };
 
-    const handleDescriptionImageUpload = (itemIndex: number, fileIndex: number, files: FileList | null) => {
+    const handleDescriptionSketchUpload = (itemIndex: number, fileIndex: number, files: FileList | null) => {
         if (!files || files.length === 0) return;
         const file = files[0];
 
         const currentFiles = [...(orderItems[itemIndex].tempFiles || [])];
         if (currentFiles[fileIndex]) {
-            currentFiles[fileIndex].descriptionImageFile = file; // Secondary image
-            currentFiles[fileIndex].descriptionImagePreview = URL.createObjectURL(file);
+            currentFiles[fileIndex].sketchFile = file; // Secondary image
+            currentFiles[fileIndex].sketchPreview = URL.createObjectURL(file);
             handleItemChange(itemIndex, { tempFiles: currentFiles });
         }
     };
@@ -131,7 +132,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         const removed = currentFiles.splice(fileIndex, 1);
         if (removed[0]) {
             URL.revokeObjectURL(removed[0].preview);
-            if (removed[0].descriptionImagePreview) URL.revokeObjectURL(removed[0].descriptionImagePreview);
+            if (removed[0].sketchPreview) URL.revokeObjectURL(removed[0].sketchPreview);
         }
         handleItemChange(itemIndex, { tempFiles: currentFiles });
     };
@@ -202,19 +203,19 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     const uploadPromises = item.tempFiles.map(async (f) => {
                         // Upload Main Image
                         const mainUrls = await uploadImages([f.file], `orders/${Date.now()}/${item.itemId}/main`);
-                        let descUrl = "";
+                        let sketchUrl = "";
 
-                        // Upload Description Image if exists
-                        if (f.descriptionImageFile) {
-                            const descUrls = await uploadImages([f.descriptionImageFile], `orders/${Date.now()}/${item.itemId}/desc`);
-                            descUrl = descUrls[0];
+                        // Upload Sketch Image if exists
+                        if (f.sketchFile) {
+                            const sketchUrls = await uploadImages([f.sketchFile], `orders/${Date.now()}/${item.itemId}/sketch`);
+                            sketchUrl = sketchUrls[0];
                         }
 
                         return {
                             imageUrl: mainUrls[0],
                             title: f.title || "Reference Image",
                             description: f.description,
-                            descriptionImageUrl: descUrl
+                            sketchImageUrl: sketchUrl
                         };
                     });
 
@@ -581,7 +582,12 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                         <div className="flex flex-col sm:flex-row items-start gap-5">
                                                             {/* Main Image Preview */}
                                                             <div className="shrink-0 relative">
-                                                                <img src={file.preview} alt="Main" className="w-28 h-28 object-cover rounded-lg border bg-gray-100 shadow-sm" />
+                                                                <img
+                                                                    src={file.preview}
+                                                                    alt="Main"
+                                                                    className="w-28 h-28 object-cover rounded-lg border bg-gray-100 shadow-sm cursor-pointer"
+                                                                    onClick={() => setPreviewModal(file.preview)}
+                                                                />
                                                                 <div className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                                                                     #{fIdx + 1}
                                                                 </div>
@@ -622,9 +628,24 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                             {/* Secondary Image Upload (Sketch/Description) */}
                                                             <div className="shrink-0 w-full sm:w-auto text-center group/sketch">
                                                                 <label className="block text-[10px] uppercase text-gray-400 mb-1">Sketch / Detail</label>
-                                                                <div className="w-24 h-24 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer bg-gray-50 hover:bg-white hover:border-indigo-400 relative overflow-hidden transition-all">
-                                                                    {file.descriptionImagePreview ? (
-                                                                        <img src={file.descriptionImagePreview} className="w-full h-full object-cover" />
+                                                                <div
+                                                                    className="w-24 h-24 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer bg-gray-50 hover:bg-white hover:border-indigo-400 relative overflow-hidden transition-all"
+                                                                    onClick={() => document.getElementById(`sketch-upload-${index}-${fIdx}`)?.click()}
+                                                                >
+                                                                    {file.sketchPreview ? (
+                                                                        <div className="relative w-full h-full group/preview">
+                                                                            <img
+                                                                                src={file.sketchPreview}
+                                                                                className="w-full h-full object-cover"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setPreviewModal(file.sketchPreview!);
+                                                                                }}
+                                                                            />
+                                                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover/preview:opacity-100 transition-opacity pointer-events-none">
+                                                                                <span className="text-white text-[10px]">View/Change</span>
+                                                                            </div>
+                                                                        </div>
                                                                     ) : (
                                                                         <div className="text-center p-2">
                                                                             <Plus className="w-5 h-5 mx-auto text-gray-400 group-hover/sketch:text-indigo-400 transition-colors" />
@@ -633,9 +654,11 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                     )}
                                                                     <input
                                                                         type="file"
+                                                                        id={`sketch-upload-${index}-${fIdx}`}
                                                                         className="hidden"
                                                                         accept="image/*"
-                                                                        onChange={(e) => handleDescriptionImageUpload(index, fIdx, e.target.files)}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        onChange={(e) => handleDescriptionSketchUpload(index, fIdx, e.target.files)}
                                                                     />
                                                                 </div>
                                                             </div>
@@ -688,30 +711,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 </div>
                                             </div>
                                         )}
-
-                                        {/* Financials per Item */}
-                                        <div className="grid grid-cols-2 gap-5 pt-5 border-t border-dashed">
-                                            <div>
-                                                <label className="label text-[11px] uppercase tracking-wider text-gray-500">Est. Labour Cost (₹)</label>
-                                                <input
-                                                    type="number"
-                                                    value={item.labourCost || ""}
-                                                    onChange={(e) => handleItemChange(index, { labourCost: parseFloat(e.target.value) })}
-                                                    className="input py-1.5"
-                                                    placeholder="0.00"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="label text-[11px] uppercase tracking-wider text-gray-500">Est. Material Cost (₹)</label>
-                                                <input
-                                                    type="number"
-                                                    value={item.materialCost || ""}
-                                                    onChange={(e) => handleItemChange(index, { materialCost: parseFloat(e.target.value) })}
-                                                    className="input py-1.5"
-                                                    placeholder="0.00"
-                                                />
-                                            </div>
-                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -723,7 +722,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 <div className="pt-6 border-t sticky bottom-0 bg-white/95 backdrop-blur-sm dark:bg-gray-900/95 pb-4 z-20">
                     <div className="flex justify-between items-center mb-4 text-sm font-medium bg-gray-50 p-3 rounded-lg border">
                         <span className="text-gray-600">Total Items: <span className="font-bold text-gray-900">{orderItems.length}</span></span>
-                        <span className="text-gray-600">Total Est: <span className="font-bold text-gray-900">₹{calculateItemsTotals(orderItems as OrderItem[]).totalLabourCost + calculateItemsTotals(orderItems as OrderItem[]).totalMaterialCost}</span></span>
                     </div>
 
                     <button
@@ -746,6 +744,27 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     <p className="text-[10px] text-center text-gray-400 mt-3">Each item will start its own independent workflow.</p>
                 </div>
             </div>
+
+            {/* Fullscreen Image Modal */}
+            {previewModal && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => setPreviewModal(null)}
+                >
+                    <button
+                        className="absolute top-4 right-4 text-white/50 hover:text-white"
+                        onClick={() => setPreviewModal(null)}
+                    >
+                        <X className="w-8 h-8" />
+                    </button>
+                    <img
+                        src={previewModal}
+                        alt="Preview"
+                        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
         </div>
     );
 }

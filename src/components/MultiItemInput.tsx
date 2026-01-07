@@ -169,30 +169,6 @@ export default function MultiItemInput({
                                 {/* Row 2: Costs and Deadline */}
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="label">Material Cost (₹)</label>
-                                        <input
-                                            type="number"
-                                            value={item.materialCost || ""}
-                                            onChange={(e) => updateItem(index, { materialCost: parseFloat(e.target.value) || 0 })}
-                                            className="input"
-                                            placeholder="0"
-                                            min="0"
-                                            disabled={disabled}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="label">Labour Cost (₹)</label>
-                                        <input
-                                            type="number"
-                                            value={item.labourCost || ""}
-                                            onChange={(e) => updateItem(index, { labourCost: parseFloat(e.target.value) || 0 })}
-                                            className="input"
-                                            placeholder="0"
-                                            min="0"
-                                            disabled={disabled}
-                                        />
-                                    </div>
-                                    <div>
                                         <label className="label">Due Date</label>
                                         <input
                                             type="date"
@@ -247,17 +223,6 @@ export default function MultiItemInput({
                     </div>
                 ))}
             </div>
-
-            {/* Summary */}
-            {items.length > 0 && (
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
-                    <p className="text-sm text-indigo-700 dark:text-indigo-300">
-                        <strong>{items.length}</strong> item(s) •
-                        Total Material: <strong>₹{items.reduce((sum, i) => sum + (i.materialCost || 0), 0).toLocaleString()}</strong> •
-                        Total Labour: <strong>₹{items.reduce((sum, i) => sum + (i.labourCost || 0), 0).toLocaleString()}</strong>
-                    </p>
-                </div>
-            )}
         </div>
     );
 }

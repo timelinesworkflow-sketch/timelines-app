@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Camera, X, Plus, Image as ImageIcon } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Camera, X, Plus, Image as ImageIcon, Eye } from "lucide-react";
 import { ItemReferenceImage } from "@/types";
 
 interface ReferenceImageUploadProps {
@@ -12,13 +12,13 @@ interface ReferenceImageUploadProps {
 }
 
 interface ImageUploadState {
+    id: string;
     file: File | null;
     preview: string;
     title: string;
     description: string;
-    hasDescriptionImage: boolean;
-    descriptionFile: File | null;
-    descriptionPreview: string;
+    sketchFile: File | null;
+    sketchPreview: string;
 }
 
 export default function ReferenceImageUpload({
@@ -27,23 +27,47 @@ export default function ReferenceImageUpload({
     onFileUpload,
     uploading = false,
 }: ReferenceImageUploadProps) {
+    // We maintain purely local state for the files, but we sync metadata to parent
     const [imageStates, setImageStates] = useState<ImageUploadState[]>([
         createEmptyImageState(),
     ]);
+
+    // Refs for file inputs
     const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const descFileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const sketchInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    // Modal state
+    const [previewModal, setPreviewModal] = useState<string | null>(null);
 
     function createEmptyImageState(): ImageUploadState {
         return {
+            id: crypto.randomUUID(),
             file: null,
             preview: "",
             title: "",
             description: "",
-            hasDescriptionImage: false,
-            descriptionFile: null,
-            descriptionPreview: "",
+            sketchFile: null,
+            sketchPreview: "",
         };
     }
+
+    // Initialize from props if we have existing images (edit mode)
+    useEffect(() => {
+        if (images.length > 0 && imageStates.length === 1 && !imageStates[0].file && !imageStates[0].title) {
+            // Map existing stored images to state for editing
+            // Note: We won't have File objects for existing images, just URLs
+            const states = images.map(img => ({
+                id: crypto.randomUUID(),
+                file: null, // No file object for existing remote image
+                preview: img.imageUrl,
+                title: img.title,
+                description: img.description || "",
+                sketchFile: null,
+                sketchPreview: img.sketchImageUrl || img.descriptionImageUrl || "",
+            }));
+            setImageStates(states);
+        }
+    }, []);
 
     const handleFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -58,11 +82,12 @@ export default function ReferenceImageUpload({
                 preview: reader.result as string,
             };
             setImageStates(newStates);
+            emitChanges(newStates);
         };
         reader.readAsDataURL(file);
     };
 
-    const handleDescriptionFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleSketchFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -71,18 +96,41 @@ export default function ReferenceImageUpload({
             const newStates = [...imageStates];
             newStates[index] = {
                 ...newStates[index],
-                descriptionFile: file,
-                descriptionPreview: reader.result as string,
+                sketchFile: file,
+                sketchPreview: reader.result as string,
             };
             setImageStates(newStates);
+            emitChanges(newStates);
         };
         reader.readAsDataURL(file);
     };
 
-    const updateImageState = (index: number, field: keyof ImageUploadState, value: string | boolean) => {
+    const updateField = (index: number, field: keyof ImageUploadState, value: string) => {
         const newStates = [...imageStates];
+        // @ts-ignore
         newStates[index] = { ...newStates[index], [field]: value };
         setImageStates(newStates);
+        emitChanges(newStates);
+    };
+
+    const emitChanges = (states: ImageUploadState[]) => {
+        // We only emit the metadata structure back to parent
+        // The parent doesn't usually store the File objects in its own state, 
+        // but it might need to know about the text fields.
+        // However, the actual upload happens via onFileUpload or separate process.
+        // ItemForm expects 'ItemReferenceImage[]' which has imageUrl.
+        // For new uploads, we don't have imageUrl yet.
+        // So we might need to handle this carefully.
+        // For now, we update the parent with what we have.
+
+        const mappedImages: ItemReferenceImage[] = states.map(s => ({
+            imageUrl: s.preview, // This is dataURL for new, http URL for existing
+            title: s.title,
+            description: s.description,
+            sketchImageUrl: s.sketchPreview,
+        }));
+
+        onChange(mappedImages);
     };
 
     const addNewImageSlot = () => {
@@ -91,27 +139,32 @@ export default function ReferenceImageUpload({
 
     const removeImage = (index: number) => {
         if (imageStates.length <= 1) {
-            // Reset to empty if last one
-            setImageStates([createEmptyImageState()]);
+            const empty = createEmptyImageState();
+            setImageStates([empty]);
+            emitChanges([empty]);
             return;
         }
         const newStates = [...imageStates];
         newStates.splice(index, 1);
         setImageStates(newStates);
+        emitChanges(newStates);
     };
 
     const triggerFileInput = (index: number) => {
         fileInputRefs.current[index]?.click();
     };
 
-    const triggerDescFileInput = (index: number) => {
-        descFileInputRefs.current[index]?.click();
+    const triggerSketchInput = (index: number) => {
+        sketchInputRefs.current[index]?.click();
     };
 
-    // Check if an image is ready (has file and title)
-    const isImageReady = (state: ImageUploadState) => {
-        return state.file && state.title.trim().length > 0;
+    // Validation for "Add Next"
+    const isCurrentSlotComplete = (state: ImageUploadState) => {
+        return !!(state.preview && state.title.trim());
     };
+
+    // Check if the last slot is complete
+    const canAddMore = isCurrentSlotComplete(imageStates[imageStates.length - 1]);
 
     return (
         <div className="space-y-4">
@@ -121,166 +174,216 @@ export default function ReferenceImageUpload({
 
             {imageStates.map((state, index) => (
                 <div
-                    key={index}
-                    className="bg-slate-700/50 rounded-lg p-4 space-y-3"
+                    key={state.id}
+                    className="bg-slate-700/50 rounded-lg p-4 space-y-3 border border-slate-600/50 relative group"
                 >
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-300">
-                            Reference Image #{index + 1}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <div className="flex items-start gap-4">
 
-                    {/* Image Upload Area */}
-                    <div className="flex gap-4">
-                        {/* Main Image */}
+                        {/* 1. Main Image (Left) */}
                         <div className="flex-shrink-0">
                             <input
-                                ref={(el) => {
-                                    if (el) fileInputRefs.current[index] = el;
-                                }}
+                                ref={(el) => { if (el) fileInputRefs.current[index] = el; }}
                                 type="file"
                                 accept="image/*"
                                 capture="environment"
                                 onChange={(e) => handleFileChange(index, e)}
                                 className="hidden"
                             />
+                            {/* Number Badge */}
+                            <div className="absolute -top-2 -left-2 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg z-10">
+                                #{index + 1}
+                            </div>
+
                             {state.preview ? (
-                                <div
-                                    className="relative w-24 h-24 rounded-lg overflow-hidden cursor-pointer"
-                                    onClick={() => triggerFileInput(index)}
-                                >
+                                <div className="group/img relative w-32 h-32 rounded-lg overflow-hidden border border-slate-500 bg-black/20">
                                     <img
                                         src={state.preview}
                                         alt="Preview"
                                         className="w-full h-full object-cover"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                        <Camera className="w-6 h-6 text-white" />
+                                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewModal(state.preview)}
+                                            className="p-1.5 bg-white/20 hover:bg-white/30 rounded-full text-white"
+                                            title="View Fullscreen"
+                                        >
+                                            <Eye className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => triggerFileInput(index)}
+                                            className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs text-white"
+                                        >
+                                            Change
+                                        </button>
                                     </div>
                                 </div>
                             ) : (
                                 <button
                                     type="button"
                                     onClick={() => triggerFileInput(index)}
-                                    className="w-24 h-24 border-2 border-dashed border-gray-500 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
+                                    className="w-32 h-32 border-2 border-dashed border-gray-500 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-slate-800/50"
                                 >
-                                    <Camera className="w-6 h-6" />
-                                    <span className="text-xs">Upload</span>
+                                    <Camera className="w-8 h-8" />
+                                    <span className="text-xs font-medium">Add Photo</span>
                                 </button>
                             )}
                         </div>
 
-                        {/* Title & Description */}
-                        <div className="flex-1 space-y-2">
-                            <input
-                                type="text"
-                                value={state.title}
-                                onChange={(e) => updateImageState(index, "title", e.target.value)}
-                                placeholder="Image Title *"
-                                className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm placeholder-gray-400 border border-slate-500 focus:border-cyan-500 focus:outline-none"
-                                required
-                            />
-                            <textarea
-                                value={state.description}
-                                onChange={(e) => updateImageState(index, "description", e.target.value)}
-                                placeholder="Description (optional)"
-                                rows={2}
-                                className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm placeholder-gray-400 border border-slate-500 focus:border-cyan-500 focus:outline-none resize-none"
-                            />
+                        {/* 2. Inputs (Middle) */}
+                        <div className="flex-1 space-y-3 min-w-0">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">IMAGE TITLE *</label>
+                                <input
+                                    type="text"
+                                    value={state.title}
+                                    onChange={(e) => updateField(index, "title", e.target.value)}
+                                    placeholder="e.g. Front View, Sleeve Detail"
+                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none placeholder-gray-500"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">DESCRIPTION (OPTIONAL)</label>
+                                <textarea
+                                    value={state.description}
+                                    onChange={(e) => updateField(index, "description", e.target.value)}
+                                    placeholder="Any specific notes about this view..."
+                                    rows={2}
+                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none resize-none placeholder-gray-500"
+                                />
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Add Description Image Toggle */}
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id={`desc-image-toggle-${index}`}
-                            checked={state.hasDescriptionImage}
-                            onChange={(e) => updateImageState(index, "hasDescriptionImage", e.target.checked)}
-                            className="rounded border-gray-500 bg-slate-600 text-cyan-500 focus:ring-cyan-500"
-                        />
-                        <label
-                            htmlFor={`desc-image-toggle-${index}`}
-                            className="text-sm text-gray-400"
-                        >
-                            Add image as description
-                        </label>
-                    </div>
+                        {/* 3. Sketch / Detail Image (Right) */}
+                        <div className="flex-shrink-0 flex flex-col items-center">
+                            <label className="text-[10px] font-medium text-gray-400 mb-2 tracking-wider">SKETCH / DETAIL</label>
 
-                    {/* Description Image Upload */}
-                    {state.hasDescriptionImage && (
-                        <div className="ml-6">
                             <input
-                                ref={(el) => {
-                                    if (el) descFileInputRefs.current[index] = el;
-                                }}
+                                ref={(el) => { if (el) sketchInputRefs.current[index] = el; }}
                                 type="file"
                                 accept="image/*"
                                 capture="environment"
-                                onChange={(e) => handleDescriptionFileChange(index, e)}
+                                onChange={(e) => handleSketchFileChange(index, e)}
                                 className="hidden"
                             />
-                            {state.descriptionPreview ? (
-                                <div
-                                    className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer"
-                                    onClick={() => triggerDescFileInput(index)}
-                                >
+
+                            {state.sketchPreview ? (
+                                <div className="group/sketch relative w-24 h-24 rounded-lg overflow-hidden border border-slate-500 bg-black/20">
                                     <img
-                                        src={state.descriptionPreview}
-                                        alt="Description"
+                                        src={state.sketchPreview}
+                                        alt="Sketch"
                                         className="w-full h-full object-cover"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                        <ImageIcon className="w-5 h-5 text-white" />
+                                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover/sketch:opacity-100 transition-opacity gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewModal(state.sketchPreview)}
+                                            className="p-1 bg-white/20 hover:bg-white/30 rounded-full text-white"
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => triggerSketchInput(index)}
+                                            className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] text-white"
+                                        >
+                                            Change
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newStates = [...imageStates];
+                                                newStates[index] = { ...newStates[index], sketchFile: null, sketchPreview: "" };
+                                                setImageStates(newStates);
+                                                emitChanges(newStates);
+                                            }}
+                                            className="px-2 py-0.5 bg-red-500/50 hover:bg-red-500/70 rounded text-[10px] text-white"
+                                        >
+                                            Remove
+                                        </button>
                                     </div>
                                 </div>
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => triggerDescFileInput(index)}
-                                    className="w-20 h-20 border-2 border-dashed border-gray-500 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
+                                    onClick={() => triggerSketchInput(index)}
+                                    className="w-24 h-24 border-2 border-dashed border-slate-600 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-500 hover:border-gray-400 hover:text-gray-300 transition-colors bg-slate-800/30"
                                 >
-                                    <ImageIcon className="w-5 h-5" />
-                                    <span className="text-[10px]">Desc Image</span>
+                                    <Plus className="w-5 h-5" />
+                                    <span className="text-[10px]">Add Photo</span>
                                 </button>
                             )}
                         </div>
-                    )}
 
-                    {/* Validation indicator */}
-                    {!state.file && (
-                        <p className="text-xs text-yellow-400">
-                            ⚠ Please upload an image
-                        </p>
+                        {/* Top Right Remove Button (for the whole row) */}
+                        <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="absolute top-2 right-2 text-gray-500 hover:text-red-400 transition-colors"
+                            title="Remove Image"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+
+                    </div>
+
+                    {/* Validation Hints */}
+                    {(!state.file && index === imageStates.length - 1) && (
+                        <div className="flex items-center gap-2 text-amber-500/80 text-xs px-1">
+                            <span>* Main image required</span>
+                        </div>
                     )}
-                    {state.file && !state.title.trim() && (
-                        <p className="text-xs text-yellow-400">
-                            ⚠ Image title is required
-                        </p>
+                    {(state.file && !state.title.trim() && index === imageStates.length - 1) && (
+                        <div className="flex items-center gap-2 text-amber-500/80 text-xs px-1">
+                            <span>* Title required</span>
+                        </div>
                     )}
                 </div>
             ))}
 
             {/* Add More Button */}
-            <button
-                type="button"
-                onClick={addNewImageSlot}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-gray-300 rounded-lg hover:bg-slate-600 transition-colors"
-            >
-                <Plus className="w-4 h-4" />
-                Add Another Image
-            </button>
+            <div className="pt-2">
+                <button
+                    type="button"
+                    onClick={addNewImageSlot}
+                    disabled={!canAddMore}
+                    className={`w-full py-4 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all group
+                        ${canAddMore
+                            ? 'border-slate-600 hover:border-indigo-500 hover:bg-indigo-500/10 cursor-pointer text-gray-400 hover:text-indigo-400'
+                            : 'border-slate-700 opacity-50 cursor-not-allowed text-gray-600'
+                        }`}
+                >
+                    <Plus className={`w-6 h-6 ${canAddMore ? 'group-hover:scale-110 transition-transform' : ''}`} />
+                    <span className="font-medium">Add Next Image</span>
+                    {!canAddMore && (
+                        <span className="text-xs font-normal">Complete the current image first</span>
+                    )}
+                </button>
+            </div>
+
+            {/* Fullscreen Preview Modal */}
+            {previewModal && (
+                <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => setPreviewModal(null)}>
+                    <button
+                        className="absolute top-4 right-4 text-white/50 hover:text-white"
+                        onClick={() => setPreviewModal(null)}
+                    >
+                        <X className="w-8 h-8" />
+                    </button>
+                    <img
+                        src={previewModal}
+                        alt="Preview"
+                        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
 
             {uploading && (
-                <div className="flex items-center gap-2 text-cyan-400 text-sm">
+                <div className="flex items-center justify-center gap-2 text-cyan-400 text-sm py-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-cyan-400 border-t-transparent"></div>
                     Uploading images...
                 </div>
@@ -290,17 +393,23 @@ export default function ReferenceImageUpload({
 }
 
 // Export helper to get upload data
+// This is used by the parent to get the actual File objects for upload
 export function getImageUploadData(imageStates: ImageUploadState[]): {
     files: File[];
-    metadata: Omit<ItemReferenceImage, "imageUrl" | "descriptionImageUrl">[];
-    descFiles: (File | null)[];
+    metadata: Omit<ItemReferenceImage, "imageUrl" | "descriptionImageUrl" | "sketchImageUrl">[];
+    sketchFiles: (File | null)[];
 } {
+    // We filter only "ready" items roughly, but usually the UI prevents "Add" if not ready.
+    // However, the last one might be empty if user abandoned it.
+
+    const validStates = imageStates.filter(s => s.file && s.title.trim());
+
     return {
-        files: imageStates.filter(s => s.file).map(s => s.file!),
-        metadata: imageStates.filter(s => s.file).map(s => ({
+        files: validStates.map(s => s.file!),
+        metadata: validStates.map(s => ({
             title: s.title.trim(),
             description: s.description.trim() || undefined,
         })),
-        descFiles: imageStates.filter(s => s.file).map(s => s.descriptionFile),
+        sketchFiles: validStates.map(s => s.sketchFile),
     };
 }

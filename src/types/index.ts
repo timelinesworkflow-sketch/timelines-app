@@ -509,6 +509,7 @@ export interface ItemReferenceImage {
     title: string;              // MANDATORY - Image title
     description?: string;       // Optional text description
     descriptionImageUrl?: string; // Optional image-as-description
+    sketchImageUrl?: string;    // Optional sketch/detail image
 }
 
 // Measurement type toggle for each item
