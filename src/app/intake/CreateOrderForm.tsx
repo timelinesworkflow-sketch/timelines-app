@@ -8,10 +8,13 @@ import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder
 import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info } from "lucide-react";
+import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info, Calculator } from "lucide-react";
 import ReferenceImageUpload from "@/components/customer-entry/ReferenceImageUpload";
 import DesignSectionUpload, { getDesignSectionUploadData } from "@/components/customer-entry/DesignSectionUpload";
 import Toast from "@/components/Toast";
+import { calculateOrderPricingSummary } from "@/lib/orderItems";
+import BillTemplate from "@/components/billing/BillTemplate";
+import { useRef } from "react";
 
 interface CreateOrderFormProps {
     onClose: () => void;
@@ -22,6 +25,17 @@ type LocalOrderItem = Partial<OrderItem> & {
     referenceFiles?: { file: File | null; sketchFile: File | null }[];
     designSectionFiles?: Record<string, { main?: File; sketch?: File }>;
     customGarmentName?: string;
+    itemPricing: {
+        materials: {
+            name: string;
+            quantity: number | "";
+            price: number | "";
+            color?: string;
+            isDefault: boolean;
+        }[];
+        itemTotal: number;
+        pricingConfirmed: boolean;
+    };
 };
 
 const GARMENT_OPTIONS: { value: GarmentType; label: string }[] = [
@@ -67,6 +81,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     // Customer order history lookup
     const [loadingCustomerOrders, setLoadingCustomerOrders] = useState(false);
+
+    const billTemplateRef = useRef<HTMLDivElement>(null);
+    const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+    const [selectedBillItem, setSelectedBillItem] = useState<{ item: LocalOrderItem, index: number } | null>(null);
 
     // Lookup customer orders
     useEffect(() => {
@@ -116,7 +134,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
         const newItems: LocalOrderItem[] = [];
         for (let i = 0; i < qty; i++) {
-            const item = createEmptyItem(orderItems.length + 1 + i, genGarmentType);
+            const item = createEmptyItem(orderItems.length + 1 + i, genGarmentType) as LocalOrderItem;
             item.itemName = GARMENT_OPTIONS.find(g => g.value === genGarmentType)?.label || genGarmentType;
             newItems.push(item);
         }
@@ -132,6 +150,99 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     const handleDesignSectionsChange = (index: number, sections: any[]) => {
         handleItemChange(index, { designSections: sections });
+    };
+
+    // --- PRICING LOGIC ---
+
+    const handlePricingChange = (itemIdx: number, matIdx: number, field: string, value: any) => {
+        const newItems = [...orderItems];
+        const item = { ...newItems[itemIdx] };
+        const materials = [...item.itemPricing.materials];
+        materials[matIdx] = { ...materials[matIdx], [field]: value };
+
+        // Auto-calculate item total
+        const total = materials.reduce((sum, mat) => {
+            const q = typeof mat.quantity === 'number' ? mat.quantity : 0;
+            const p = typeof mat.price === 'number' ? mat.price : 0;
+            return sum + (q * p);
+        }, 0);
+
+        item.itemPricing = { ...item.itemPricing, materials, itemTotal: total };
+        newItems[itemIdx] = item;
+        setOrderItems(newItems);
+    };
+
+    const addPricingRow = (itemIdx: number) => {
+        const newItems = [...orderItems];
+        const item = { ...newItems[itemIdx] };
+        item.itemPricing = {
+            ...item.itemPricing,
+            materials: [
+                ...item.itemPricing.materials,
+                { name: "", quantity: 0, price: 0, isDefault: false }
+            ]
+        };
+        newItems[itemIdx] = item;
+        setOrderItems(newItems);
+    };
+
+    const deletePricingRow = (itemIdx: number, matIdx: number) => {
+        const newItems = [...orderItems];
+        const item = { ...newItems[itemIdx] };
+        if (item.itemPricing.materials[matIdx].isDefault) return;
+
+        const materials = item.itemPricing.materials.filter((_, i) => i !== matIdx);
+        const total = materials.reduce((sum, mat) => {
+            const q = typeof mat.quantity === 'number' ? mat.quantity : 0;
+            const p = typeof mat.price === 'number' ? mat.price : 0;
+            return sum + (q * p);
+        }, 0);
+
+        item.itemPricing = { ...item.itemPricing, materials, itemTotal: total };
+        newItems[itemIdx] = item;
+        setOrderItems(newItems);
+    };
+
+    const confirmPricing = (itemIdx: number) => {
+        const newItems = [...orderItems];
+        const item = { ...newItems[itemIdx] };
+        item.itemPricing = { ...item.itemPricing, pricingConfirmed: true };
+        newItems[itemIdx] = item;
+        setOrderItems(newItems);
+    };
+
+    const handleDownloadItemBill = async (item: LocalOrderItem, index: number) => {
+        // We set selected item so the hidden BillTemplate renders with correct data
+        setSelectedBillItem({ item, index });
+
+        // Wait for render
+        setTimeout(async () => {
+            if (!billTemplateRef.current) {
+                setToast({ message: "Template error. Try again.", type: "error" });
+                return;
+            }
+
+            setGeneratingPdf(item.itemId || index.toString());
+            try {
+                const opt = {
+                    margin: 0,
+                    filename: `BILL_${item.itemName || 'ITEM'}_ITEM_${index + 1}.pdf`,
+                    image: { type: 'jpeg' as const, quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+                };
+                const html2pdfModule = await import("html2pdf.js");
+                const html2pdf = html2pdfModule.default;
+                await html2pdf().set(opt).from(billTemplateRef.current).save();
+                setToast({ message: "Bill downloaded successfully!", type: "success" });
+            } catch (error) {
+                console.error("PDF generation failed:", error);
+                setToast({ message: "Failed to download bill", type: "error" });
+            } finally {
+                setGeneratingPdf(null);
+                setSelectedBillItem(null);
+            }
+        }, 100);
     };
 
     // --- VALIDATION LOGIC ---
@@ -172,7 +283,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             return;
         }
 
-        const newItem = createEmptyItem(orderItems.length + 1, "blouse"); // Default
+        const newItem = createEmptyItem(orderItems.length + 1, "blouse") as LocalOrderItem; // Default
 
         // Collapse previous, expand new
         setExpandedItems(new Set([orderItems.length]));
@@ -290,7 +401,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             // Create or update customer profile
             await getOrCreateCustomer(customerPhone, customerName, customerAddress);
 
-            // Calculate totals
+            // Process item prices and calculate order summary
+            const { materials: summaryMaterials, overallTotal: summaryTotal } = calculateOrderPricingSummary(processedItems);
             const itemsTotals = calculateItemsTotals(processedItems);
 
             // 1. Create Order (Visit Container)
@@ -305,12 +417,16 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 currentStage: "intake",
                 status: "in_progress",
 
-                price: 0,
+                price: summaryTotal,
                 advanceAmount: 0,
                 materialCost: itemsTotals.totalMaterialCost,
                 labourCost: itemsTotals.totalLabourCost,
 
                 items: processedItems,
+                orderPricingSummary: {
+                    materials: summaryMaterials,
+                    overallTotal: summaryTotal
+                },
 
                 // Deprecated/Legacy fields - set to safe defaults
                 garmentType: undefined,
@@ -701,6 +817,144 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
                                             />
                                         </div>
+
+                                        {/* PRICING & MATERIALS TABLE */}
+                                        <div className="border-t pt-6 bg-gray-50/50 -mx-6 px-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h4 className="font-bold text-sm text-gray-700 flex items-center gap-2">
+                                                    <Info className="w-4 h-4 text-indigo-500" />
+                                                    <span>Pricing & Materials</span>
+                                                </h4>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+                                                        Item Total: ₹{(item.itemPricing?.itemTotal || 0).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs text-left border-collapse bg-white rounded-lg shadow-sm border border-gray-200">
+                                                    <thead className="bg-gray-100/80 text-gray-600 font-bold uppercase tracking-wider">
+                                                        <tr>
+                                                            <th className="px-3 py-2 border-b">Material</th>
+                                                            <th className="px-3 py-2 border-b w-20 text-center">Qty</th>
+                                                            <th className="px-3 py-2 border-b w-24 text-right">Price</th>
+                                                            <th className="px-3 py-2 border-b">Color (Opt)</th>
+                                                            <th className="px-3 py-2 border-b w-10"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {item.itemPricing?.materials.map((mat, mIdx) => (
+                                                            <tr key={mIdx} className="hover:bg-gray-50/50 transition-colors">
+                                                                <td className="px-3 py-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={mat.name}
+                                                                        onChange={(e) => handlePricingChange(index, mIdx, 'name', e.target.value)}
+                                                                        disabled={item.itemPricing?.pricingConfirmed || mat.isDefault}
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium disabled:opacity-70"
+                                                                        placeholder="Material name..."
+                                                                    />
+                                                                </td>
+                                                                <td className="px-3 py-2">
+                                                                    <input
+                                                                        type="number"
+                                                                        value={mat.quantity}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            handlePricingChange(index, mIdx, 'quantity', val === "" ? "" : Number(val));
+                                                                        }}
+                                                                        onFocus={(e) => e.target.select()}
+                                                                        disabled={item.itemPricing?.pricingConfirmed}
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-center font-bold disabled:opacity-70"
+                                                                        placeholder="0"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-3 py-2">
+                                                                    <div className="flex items-center justify-end font-bold text-gray-700">
+                                                                        <span className="mr-0.5">₹</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={mat.price}
+                                                                            onChange={(e) => {
+                                                                                const val = e.target.value;
+                                                                                handlePricingChange(index, mIdx, 'price', val === "" ? "" : Number(val));
+                                                                            }}
+                                                                            onFocus={(e) => e.target.select()}
+                                                                            disabled={item.itemPricing?.pricingConfirmed}
+                                                                            className="w-full bg-transparent border-none focus:ring-0 p-0 text-right disabled:opacity-70"
+                                                                            placeholder="0"
+                                                                        />
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-3 py-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={mat.color || ""}
+                                                                        onChange={(e) => handlePricingChange(index, mIdx, 'color', e.target.value)}
+                                                                        disabled={item.itemPricing?.pricingConfirmed}
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-gray-500 disabled:opacity-70 italic"
+                                                                        placeholder="Optional"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center text-gray-400">
+                                                                    {!mat.isDefault && !item.itemPricing?.pricingConfirmed && (
+                                                                        <button
+                                                                            onClick={() => deletePricingRow(index, mIdx)}
+                                                                            className="p-1 hover:text-red-500 transition-colors"
+                                                                        >
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {!item.itemPricing?.pricingConfirmed && (
+                                                <button
+                                                    onClick={() => addPricingRow(index)}
+                                                    className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    <span>Add Custom Material Row</span>
+                                                </button>
+                                            )}
+
+                                            <div className="mt-6 flex flex-wrap gap-3 items-center justify-between">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {!item.itemPricing?.pricingConfirmed ? (
+                                                        <button
+                                                            onClick={() => confirmPricing(index)}
+                                                            className="btn btn-outline py-2 px-4 text-xs font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex items-center gap-2"
+                                                        >
+                                                            <Package className="w-4 h-4" />
+                                                            Confirm Pricing
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100 text-xs font-bold">
+                                                            <Package className="w-4 h-4" />
+                                                            Pricing Confirmed
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    onClick={() => handleDownloadItemBill(item, index)}
+                                                    disabled={!item.itemPricing?.pricingConfirmed || generatingPdf === (item.itemId || index.toString())}
+                                                    className="btn btn-primary py-2 px-5 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-indigo-100 shadow-lg"
+                                                >
+                                                    {generatingPdf === (item.itemId || index.toString()) ? (
+                                                        <div className="w-3.5 h-3.5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <Plus className="w-4 h-4" />
+                                                    )}
+                                                    {generatingPdf === (item.itemId || index.toString()) ? "Generating..." : "Generate Item Bill"}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -708,10 +962,53 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 </div >
 
+                {/* 4. OVERALL ORDER PRICING SUMMARY */}
+                {orderItems.length > 0 && (
+                    <div className="bg-gray-900 text-white p-6 rounded-xl shadow-2xl overflow-hidden relative">
+                        <div className="absolute top-0 right-0 p-6 opacity-10">
+                            <Info className="w-32 h-32" />
+                        </div>
+                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 relative z-10">
+                            <Calculator className="w-5 h-5 text-indigo-400" />
+                            <span>Overall Order Pricing Summary</span>
+                        </h3>
+
+                        <div className="overflow-x-auto relative z-10">
+                            <table className="w-full text-sm text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-gray-700 text-gray-400 font-medium italic">
+                                        <th className="px-3 py-2">Material / Garment</th>
+                                        <th className="px-3 py-2 text-center w-24">Total Qty</th>
+                                        <th className="px-3 py-2 text-right w-32">Total Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-800">
+                                    {calculateOrderPricingSummary(orderItems as any).materials.map((mat, idx) => (
+                                        <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-3 py-2 font-medium">{mat.name}</td>
+                                            <td className="px-3 py-2 text-center font-bold">{mat.quantity}</td>
+                                            <td className="px-3 py-2 text-right font-bold text-indigo-400">₹{mat.price.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="bg-white/5 border-t border-indigo-500/30">
+                                        <td className="px-3 py-3 font-bold text-indigo-300">Overall Order Total</td>
+                                        <td className="px-3 py-3"></td>
+                                        <td className="px-3 py-3 text-right font-black text-xl text-white">
+                                            ₹{calculateOrderPricingSummary(orderItems as any).overallTotal.toLocaleString()}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-4 italic">* This summary is automatically aggregated from all items above. Manual edits are not permitted here.</p>
+                    </div>
+                )}
+
                 {/* Submit Section */}
                 < div className="pt-6 border-t sticky bottom-0 bg-white/95 backdrop-blur-sm dark:bg-gray-900/95 pb-4 z-20" >
                     <div className="flex justify-between items-center mb-4 text-sm font-medium bg-gray-50 p-3 rounded-lg border">
-                        <span className="text-gray-600">Total Items: <span className="font-bold text-gray-900">{orderItems.length}</span></span>
+                        <span className="text-gray-600">Total Workflow Items: <span className="font-bold text-gray-900">{orderItems.length}</span></span>
+                        <span className="text-indigo-600 font-bold">Total Estimate: ₹{calculateOrderPricingSummary(orderItems as any).overallTotal.toLocaleString()}</span>
                     </div>
 
                     <button
@@ -757,6 +1054,32 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 )
             }
+
+            {/* Hidden Bill Template for PDF Generation */}
+            <div className="fixed -left-[2000px] top-0 opacity-0 pointer-events-none">
+                {selectedBillItem && (
+                    <BillTemplate
+                        ref={billTemplateRef}
+                        customerName={customerName}
+                        customerPhone={customerPhone}
+                        customerAddress={customerAddress}
+                        billNumber={`EST-${Date.now().toString().slice(-6)}`}
+                        billDate={new Date().toLocaleDateString("en-IN")}
+                        items={selectedBillItem.item.itemPricing.materials
+                            .filter(m => (Number(m.quantity) || 0) > 0 || (Number(m.price) || 0) > 0)
+                            .map((m, i) => ({
+                                sno: i + 1,
+                                particular: m.name,
+                                qty: Number(m.quantity) || 0,
+                                price: Number(m.price) || 0,
+                                total: (Number(m.quantity) || 0) * (Number(m.price) || 0)
+                            }))}
+                        totalAmount={selectedBillItem.item.itemPricing.itemTotal}
+                        paidAmount={0}
+                        balanceAmount={selectedBillItem.item.itemPricing.itemTotal}
+                    />
+                )}
+            </div>
         </div >
     );
 }

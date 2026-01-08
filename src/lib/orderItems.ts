@@ -79,6 +79,18 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         handledByName: "",
         dueDate: Timestamp.now(),
         timeline: [],
+        itemPricing: {
+            materials: [
+                { name: garmentType ? (garmentType.replace(/_/g, " ").toUpperCase()) : "GARMENT", quantity: 1, price: 0, isDefault: true },
+                { name: "Lining", quantity: 0, price: 0, isDefault: true },
+                { name: "Sari", quantity: 0, price: 0, isDefault: true },
+                { name: "Zigzag", quantity: 0, price: 0, isDefault: true },
+                { name: "False", quantity: 0, price: 0, isDefault: true },
+                { name: "Others", quantity: 0, price: 0, isDefault: true },
+            ],
+            itemTotal: 0,
+            pricingConfirmed: false,
+        }
     };
 }
 
@@ -301,5 +313,41 @@ export function calculateItemsTotals(items: OrderItem[]): {
         totalLabourCost: 0,
         totalQuantity: 0,
     });
+}
+
+/**
+ * Aggregate item-level pricing into order-level summary
+ */
+export function calculateOrderPricingSummary(items: OrderItem[]): {
+    materials: { name: string; quantity: number; price: number }[];
+    overallTotal: number;
+} {
+    const materialMap: Record<string, { quantity: number; price: number }> = {};
+    let overallTotal = 0;
+
+    items.forEach(item => {
+        if (item.itemPricing) {
+            overallTotal += item.itemPricing.itemTotal || 0;
+            item.itemPricing.materials.forEach(m => {
+                const key = m.name;
+                if (!materialMap[key]) {
+                    materialMap[key] = { quantity: 0, price: 0 };
+                }
+                materialMap[key].quantity += (Number(m.quantity) || 0);
+                materialMap[key].price += (Number(m.quantity) || 0) * (Number(m.price) || 0);
+            });
+        }
+    });
+
+    const materials = Object.entries(materialMap).map(([name, data]) => ({
+        name,
+        quantity: data.quantity,
+        price: data.price
+    })).filter(m => m.quantity > 0 || m.price > 0);
+
+    return {
+        materials,
+        overallTotal
+    };
 }
 

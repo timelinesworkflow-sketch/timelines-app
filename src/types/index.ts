@@ -540,6 +540,35 @@ export function createDefaultDesignSections(): DesignSection[] {
 // Measurement type toggle for each item
 export type ItemMeasurementType = "measurements" | "measurement_garment";
 
+// ============================================
+// ITEM PRICING & BILLING
+// ============================================
+
+export interface ItemPricingMaterial {
+    name: string;
+    quantity: number;
+    price: number;
+    color?: string;
+    isDefault: boolean;
+}
+
+export interface ItemPricing {
+    materials: ItemPricingMaterial[];
+    itemTotal: number;
+    pricingConfirmed: boolean;
+}
+
+export interface OrderPricingSummaryMaterial {
+    name: string;
+    quantity: number;
+    price: number;
+}
+
+export interface OrderPricingSummary {
+    materials: OrderPricingSummaryMaterial[];
+    overallTotal: number;
+}
+
 // Individual item within an order - NOW THE PRIMARY WORKFLOW UNIT
 export interface OrderItem {
     itemId: string;
@@ -584,6 +613,9 @@ export interface OrderItem {
 
     // Design sections (Front Neck, Back Neck, Sleeve + custom)
     designSections: DesignSection[];
+
+    // Item-level Pricing & Billing
+    itemPricing?: ItemPricing;
 
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -684,6 +716,9 @@ export interface Order {
 
     // Embedded Marking Tasks (Parallel Workflow)
     markingTasks?: MarkingTaskMap;
+
+    // Item-based Pricing Summary
+    orderPricingSummary?: OrderPricingSummary;
 }
 
 export interface SubTask {
