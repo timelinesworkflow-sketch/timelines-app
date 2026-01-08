@@ -7,8 +7,10 @@ import { ItemReferenceImage } from "@/types";
 interface ReferenceImageUploadProps {
     images: ItemReferenceImage[];
     onChange: (images: ItemReferenceImage[]) => void;
-    onFileUpload: (files: File[], index: number) => void;
+    onFileUpload?: (files: File[], index: number) => void;
+    onFilesUpdate?: (files: { file: File | null; sketchFile: File | null }[]) => void;
     uploading?: boolean;
+    allowSketch?: boolean;
 }
 
 interface ImageUploadState {
@@ -25,7 +27,9 @@ export default function ReferenceImageUpload({
     images,
     onChange,
     onFileUpload,
+    onFilesUpdate,
     uploading = false,
+    allowSketch = true,
 }: ReferenceImageUploadProps) {
     // We maintain purely local state for the files, but we sync metadata to parent
     const [imageStates, setImageStates] = useState<ImageUploadState[]>([
@@ -67,7 +71,7 @@ export default function ReferenceImageUpload({
             }));
             setImageStates(states);
         }
-    }, []);
+    }, [images]); // Added dependency
 
     const handleFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -115,14 +119,6 @@ export default function ReferenceImageUpload({
 
     const emitChanges = (states: ImageUploadState[]) => {
         // We only emit the metadata structure back to parent
-        // The parent doesn't usually store the File objects in its own state, 
-        // but it might need to know about the text fields.
-        // However, the actual upload happens via onFileUpload or separate process.
-        // ItemForm expects 'ItemReferenceImage[]' which has imageUrl.
-        // For new uploads, we don't have imageUrl yet.
-        // So we might need to handle this carefully.
-        // For now, we update the parent with what we have.
-
         const mappedImages: ItemReferenceImage[] = states.map(s => ({
             imageUrl: s.preview, // This is dataURL for new, http URL for existing
             title: s.title,
@@ -131,6 +127,15 @@ export default function ReferenceImageUpload({
         }));
 
         onChange(mappedImages);
+
+        // Also emit files if requested
+        if (onFilesUpdate) {
+            const filesList = states.map(s => ({
+                file: s.file,
+                sketchFile: s.sketchFile
+            }));
+            onFilesUpdate(filesList);
+        }
     };
 
     const addNewImageSlot = () => {
@@ -256,66 +261,68 @@ export default function ReferenceImageUpload({
                             </div>
                         </div>
 
-                        {/* 3. Sketch / Detail Image (Right) */}
-                        <div className="flex-shrink-0 flex flex-col items-center">
-                            <label className="text-[10px] font-medium text-gray-400 mb-2 tracking-wider">SKETCH / DETAIL</label>
+                        {/* 3. Sketch / Detail Image (Right) - Conditional */}
+                        {allowSketch && (
+                            <div className="flex-shrink-0 flex flex-col items-center">
+                                <label className="text-[10px] font-medium text-gray-400 mb-2 tracking-wider">SKETCH / DETAIL</label>
 
-                            <input
-                                ref={(el) => { if (el) sketchInputRefs.current[index] = el; }}
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                onChange={(e) => handleSketchFileChange(index, e)}
-                                className="hidden"
-                            />
+                                <input
+                                    ref={(el) => { if (el) sketchInputRefs.current[index] = el; }}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={(e) => handleSketchFileChange(index, e)}
+                                    className="hidden"
+                                />
 
-                            {state.sketchPreview ? (
-                                <div className="group/sketch relative w-24 h-24 rounded-lg overflow-hidden border border-slate-500 bg-black/20">
-                                    <img
-                                        src={state.sketchPreview}
-                                        alt="Sketch"
-                                        className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover/sketch:opacity-100 transition-opacity gap-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPreviewModal(state.sketchPreview)}
-                                            className="p-1 bg-white/20 hover:bg-white/30 rounded-full text-white"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => triggerSketchInput(index)}
-                                            className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] text-white"
-                                        >
-                                            Change
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const newStates = [...imageStates];
-                                                newStates[index] = { ...newStates[index], sketchFile: null, sketchPreview: "" };
-                                                setImageStates(newStates);
-                                                emitChanges(newStates);
-                                            }}
-                                            className="px-2 py-0.5 bg-red-500/50 hover:bg-red-500/70 rounded text-[10px] text-white"
-                                        >
-                                            Remove
-                                        </button>
+                                {state.sketchPreview ? (
+                                    <div className="group/sketch relative w-24 h-24 rounded-lg overflow-hidden border border-slate-500 bg-black/20">
+                                        <img
+                                            src={state.sketchPreview}
+                                            alt="Sketch"
+                                            className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover/sketch:opacity-100 transition-opacity gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewModal(state.sketchPreview)}
+                                                className="p-1 bg-white/20 hover:bg-white/30 rounded-full text-white"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => triggerSketchInput(index)}
+                                                className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] text-white"
+                                            >
+                                                Change
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newStates = [...imageStates];
+                                                    newStates[index] = { ...newStates[index], sketchFile: null, sketchPreview: "" };
+                                                    setImageStates(newStates);
+                                                    emitChanges(newStates);
+                                                }}
+                                                className="px-2 py-0.5 bg-red-500/50 hover:bg-red-500/70 rounded text-[10px] text-white"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => triggerSketchInput(index)}
-                                    className="w-24 h-24 border-2 border-dashed border-slate-600 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-500 hover:border-gray-400 hover:text-gray-300 transition-colors bg-slate-800/30"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                    <span className="text-[10px]">Add Photo</span>
-                                </button>
-                            )}
-                        </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => triggerSketchInput(index)}
+                                        className="w-24 h-24 border-2 border-dashed border-slate-600 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-500 hover:border-gray-400 hover:text-gray-300 transition-colors bg-slate-800/30"
+                                    >
+                                        <Plus className="w-5 h-5" />
+                                        <span className="text-[10px]">Add Photo</span>
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         {/* Top Right Remove Button (for the whole row) */}
                         <button

@@ -270,7 +270,7 @@ export default function StagePageContent({
 
                         <h3 className="font-semibold text-gray-900 dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
                             <Eye className="w-4 h-4" />
-                            <span>Reference Images ({Array.isArray(currentItem.referenceImages) ? currentItem.referenceImages.length : 0})</span>
+                            <span>Customer Garment Images ({Array.isArray(currentItem.referenceImages) ? currentItem.referenceImages.length : 0})</span>
                         </h3>
 
                         {(Array.isArray(currentItem.referenceImages) && currentItem.referenceImages.length > 0) ? (

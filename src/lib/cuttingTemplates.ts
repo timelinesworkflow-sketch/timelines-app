@@ -54,9 +54,22 @@ export function generateSubStageId(taskName: string): string {
 
 export const DEFAULT_CUTTING_TEMPLATES: Record<GarmentType, CuttingTemplateTask[]> = {
     blouse: [
+        // Legacy fallback (same as lining)
         { taskName: "Lining Cutting", taskOrder: 1, isMandatory: true },
         { taskName: "Main Fabric Cutting", taskOrder: 2, isMandatory: true },
         { taskName: "Sleeve Cutting", taskOrder: 3, isMandatory: true },
+        { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
+    ],
+    lining_blouse: [
+        { taskName: "Lining Cutting", taskOrder: 1, isMandatory: true },
+        { taskName: "Main Fabric Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Sleeve Cutting", taskOrder: 3, isMandatory: true },
+        { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
+    ],
+    sada_blouse: [
+        { taskName: "Main Fabric Cutting", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Hem/Patti Cutting", taskOrder: 3, isMandatory: true },
         { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
     ],
     chudi: [
@@ -65,10 +78,27 @@ export const DEFAULT_CUTTING_TEMPLATES: Record<GarmentType, CuttingTemplateTask[
         { taskName: "Collar Cutting", taskOrder: 3, isMandatory: false },
         { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
     ],
+    top: [
+        { taskName: "Body Panel Cutting", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Cutting Quality Check", taskOrder: 3, isMandatory: true },
+    ],
+    pant: [
+        { taskName: "Pant Panel Cutting", taskOrder: 1, isMandatory: true },
+        { taskName: "Waist Band Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Pocket Cutting", taskOrder: 3, isMandatory: false },
+        { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
+    ],
     frock: [
         { taskName: "Yoke Cutting", taskOrder: 1, isMandatory: true },
         { taskName: "Skirt Cutting", taskOrder: 2, isMandatory: true },
         { taskName: "Sleeve Cutting", taskOrder: 3, isMandatory: false },
+        { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
+    ],
+    lehenga: [
+        { taskName: "Lehenga Panel Cutting", taskOrder: 1, isMandatory: true },
+        { taskName: "Waist Band Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Blouse/Top Cutting", taskOrder: 3, isMandatory: true },
         { taskName: "Cutting Quality Check", taskOrder: 4, isMandatory: true },
     ],
     pavadai_sattai: [
@@ -83,6 +113,11 @@ export const DEFAULT_CUTTING_TEMPLATES: Record<GarmentType, CuttingTemplateTask[
     aari_pavada_sattai: [
         { taskName: "Repair Piece Cutting", taskOrder: 1, isMandatory: true },
         { taskName: "Cutting Quality Check", taskOrder: 2, isMandatory: true },
+    ],
+    rework: [
+        { taskName: "Assessment", taskOrder: 1, isMandatory: true },
+        { taskName: "Opening/Cutting", taskOrder: 2, isMandatory: true },
+        { taskName: "Cutting Quality Check", taskOrder: 3, isMandatory: true },
     ],
     other: [
         { taskName: "General Cutting", taskOrder: 1, isMandatory: true },
@@ -210,7 +245,7 @@ export async function getAllCuttingTemplates(): Promise<CuttingTemplate[]> {
     }
 
     // Add defaults for any missing garment types
-    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other"];
+    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other", "lining_blouse", "sada_blouse", "top", "pant", "lehenga", "rework"];
     const now = Timestamp.now();
 
     garmentTypes.forEach(garmentType => {

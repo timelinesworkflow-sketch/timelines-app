@@ -60,6 +60,20 @@ export const DEFAULT_STITCHING_TEMPLATES: Record<GarmentType, StitchingTemplateT
         { taskName: "Hook & Button", taskOrder: 4, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 5, isMandatory: true },
     ],
+    lining_blouse: [
+        { taskName: "Body Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Attachment", taskOrder: 2, isMandatory: true },
+        { taskName: "Neck Finishing", taskOrder: 3, isMandatory: true },
+        { taskName: "Hook & Button", taskOrder: 4, isMandatory: true },
+        { taskName: "Stitching Quality Check", taskOrder: 5, isMandatory: true },
+    ],
+    sada_blouse: [
+        { taskName: "Body Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Attachment", taskOrder: 2, isMandatory: true },
+        { taskName: "Hemming/Patti", taskOrder: 3, isMandatory: true },
+        { taskName: "Hook & Button", taskOrder: 4, isMandatory: true },
+        { taskName: "Stitching Quality Check", taskOrder: 5, isMandatory: true },
+    ],
     chudi: [
         { taskName: "Body Stitching", taskOrder: 1, isMandatory: true },
         { taskName: "Sleeve Attachment", taskOrder: 2, isMandatory: true },
@@ -67,12 +81,30 @@ export const DEFAULT_STITCHING_TEMPLATES: Record<GarmentType, StitchingTemplateT
         { taskName: "Side Slit Work", taskOrder: 4, isMandatory: false },
         { taskName: "Stitching Quality Check", taskOrder: 5, isMandatory: true },
     ],
+    top: [
+        { taskName: "Body Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Attachment", taskOrder: 2, isMandatory: true },
+        { taskName: "Side Slit Work", taskOrder: 3, isMandatory: false },
+        { taskName: "Stitching Quality Check", taskOrder: 4, isMandatory: true },
+    ],
+    pant: [
+        { taskName: "Pant Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Waist Band/Elastic", taskOrder: 2, isMandatory: true },
+        { taskName: "Hemming", taskOrder: 3, isMandatory: false },
+        { taskName: "Stitching Quality Check", taskOrder: 4, isMandatory: true },
+    ],
     frock: [
         { taskName: "Yoke Stitching", taskOrder: 1, isMandatory: true },
         { taskName: "Skirt Pleating", taskOrder: 2, isMandatory: true },
         { taskName: "Sleeve Attachment", taskOrder: 3, isMandatory: false },
         { taskName: "Trim & Finishing", taskOrder: 4, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 5, isMandatory: true },
+    ],
+    lehenga: [
+        { taskName: "Lehenga Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Blouse Stitching", taskOrder: 2, isMandatory: true },
+        { taskName: "Waist Band/Dori", taskOrder: 3, isMandatory: true },
+        { taskName: "Stitching Quality Check", taskOrder: 4, isMandatory: true },
     ],
     pavadai_sattai: [
         { taskName: "Pavadai Stitching", taskOrder: 1, isMandatory: true },
@@ -85,6 +117,10 @@ export const DEFAULT_STITCHING_TEMPLATES: Record<GarmentType, StitchingTemplateT
         { taskName: "Stitching Quality Check", taskOrder: 2, isMandatory: true },
     ],
     aari_pavada_sattai: [
+        { taskName: "Repair Stitching", taskOrder: 1, isMandatory: true },
+        { taskName: "Stitching Quality Check", taskOrder: 2, isMandatory: true },
+    ],
+    rework: [
         { taskName: "Repair Stitching", taskOrder: 1, isMandatory: true },
         { taskName: "Stitching Quality Check", taskOrder: 2, isMandatory: true },
     ],
@@ -203,7 +239,8 @@ export async function getStitchingTemplateForGarmentType(garmentType: GarmentTyp
  */
 export async function getAllStitchingTemplates(): Promise<StitchingTemplate[]> {
     const garmentTypes: GarmentType[] = [
-        "blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other"
+        "blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other",
+        "lining_blouse", "sada_blouse", "top", "pant", "lehenga", "rework"
     ];
 
     const templates: StitchingTemplate[] = [];

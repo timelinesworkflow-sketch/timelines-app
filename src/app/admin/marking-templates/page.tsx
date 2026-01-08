@@ -10,11 +10,17 @@ import Toast from "@/components/Toast";
 
 const GARMENT_LABELS: Record<GarmentType, string> = {
     blouse: "Blouse",
+    lining_blouse: "Lining Blouse",
+    sada_blouse: "Sada Blouse",
     chudi: "Chudi / Salwar Top",
+    top: "Top / Kurti",
+    pant: "Pant",
     frock: "Frock",
+    lehenga: "Lehenga",
     pavadai_sattai: "Pavadai Sattai",
     aari_blouse: "Aari Blouse",
     aari_pavada_sattai: "Aari Pavada Sattai",
+    rework: "Rework / Alteration",
     other: "Other",
 };
 

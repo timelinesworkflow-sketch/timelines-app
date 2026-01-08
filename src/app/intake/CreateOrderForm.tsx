@@ -9,6 +9,7 @@ import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
 import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info } from "lucide-react";
+import ReferenceImageUpload from "@/components/customer-entry/ReferenceImageUpload";
 import DesignSectionUpload, { getDesignSectionUploadData } from "@/components/customer-entry/DesignSectionUpload";
 import Toast from "@/components/Toast";
 
@@ -18,14 +19,7 @@ interface CreateOrderFormProps {
 
 // Local type to handle file uploads before sending to server
 type LocalOrderItem = Partial<OrderItem> & {
-    tempFiles?: {
-        file: File;
-        preview: string;
-        description: string;
-        title: string;
-        sketchFile?: File; // Secondary image explaining the main one
-        sketchPreview?: string;
-    }[];
+    referenceFiles?: { file: File | null; sketchFile: File | null }[];
     designSectionFiles?: Record<string, { main?: File; sketch?: File }>;
     customGarmentName?: string;
 };
@@ -53,7 +47,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     // Form state - Global Customer Data Only
     const [customerName, setCustomerName] = useState("");
     const [customerPhone, setCustomerPhone] = useState("");
-    const [customerAddress, setCustomerAddress] = useState("");
     const [customerAddress, setCustomerAddress] = useState("");
     // Global Due Date REMOVED - Enforced at Item Level
 
@@ -104,50 +97,14 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         setOrderItems(newItems);
     };
 
-    // --- SEQUENTIAL IMAGE LOGIC ---
+    // --- REFERENCE IMAGE LOGIC ---
 
-    const addImageSlot = (itemIndex: number) => {
-        const currentFiles = orderItems[itemIndex].tempFiles || [];
-        // Only allow adding new slot if previous one is valid (has file and title)
-        if (currentFiles.length > 0) {
-            const lastFile = currentFiles[currentFiles.length - 1];
-            if (!lastFile.file || !lastFile.title) {
-                setToast({ message: "Please complete the previous image details (Image & Title required)", type: "error" });
-                return;
-            }
-        }
-
-        document.getElementById(`file-upload-${itemIndex}`)?.click();
+    const handleReferenceFilesUpdate = (index: number, files: { file: File | null; sketchFile: File | null }[]) => {
+        handleItemChange(index, { referenceFiles: files });
     };
 
-    const handleFileUpload = (index: number, files: FileList | null) => {
-        if (!files || files.length === 0) return;
-
-        // We handle one file at a time for sequential logic
-        const file = files[0];
-        const newItem = {
-            file,
-            preview: URL.createObjectURL(file),
-            description: "",
-            title: "", // Must be filled by user
-            sketchFile: undefined,
-            sketchPreview: undefined
-        };
-
-        const currentFiles = orderItems[index].tempFiles || [];
-        handleItemChange(index, { tempFiles: [...currentFiles, newItem] });
-    };
-
-    const handleDescriptionSketchUpload = (itemIndex: number, fileIndex: number, files: FileList | null) => {
-        if (!files || files.length === 0) return;
-        const file = files[0];
-
-        const currentFiles = [...(orderItems[itemIndex].tempFiles || [])];
-        if (currentFiles[fileIndex]) {
-            currentFiles[fileIndex].sketchFile = file; // Secondary image
-            currentFiles[fileIndex].sketchPreview = URL.createObjectURL(file);
-            handleItemChange(itemIndex, { tempFiles: currentFiles });
-        }
+    const handleReferenceImagesChange = (index: number, images: ItemReferenceImage[]) => {
+        handleItemChange(index, { referenceImages: images });
     };
 
     const handleGenerateItems = () => {
@@ -155,23 +112,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         for (let i = 0; i < genQuantity; i++) {
             const item = createEmptyItem(orderItems.length + 1 + i, genGarmentType);
             item.itemName = GARMENT_OPTIONS.find(g => g.value === genGarmentType)?.label || genGarmentType;
-            // Ensure due date is present (default to tomorrow/today or empty force user?)
-            // createEmptyItem sets it to Timestamp.now(). We should probably require user to set it.
-            // Leaving as default now() is safe, but user can change.
             newItems.push(item);
         }
         setOrderItems([...orderItems, ...newItems]);
         setToast({ message: `Generated ${genQuantity} item(s)`, type: "info" });
-    };
-
-    const removeFile = (itemIndex: number, fileIndex: number) => {
-        const currentFiles = [...(orderItems[itemIndex].tempFiles || [])];
-        const removed = currentFiles.splice(fileIndex, 1);
-        if (removed[0]) {
-            URL.revokeObjectURL(removed[0].preview);
-            if (removed[0].sketchPreview) URL.revokeObjectURL(removed[0].sketchPreview);
-        }
-        handleItemChange(itemIndex, { tempFiles: currentFiles });
     };
 
     const handleDesignFilesUpdate = (index: number, filesMap: Record<string, { main?: File; sketch?: File }>) => {
@@ -204,8 +148,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             return hasMeasurements;
         } else {
             // Garment Mode: Must have at least 1 image and it must be valid (Title required)
-            if (!item.tempFiles || item.tempFiles.length === 0) return false;
-            return item.tempFiles.every(f => !!f.title);
+            // Using referenceImages metadata which is synced from component
+            if (!item.referenceImages || item.referenceImages.length === 0) return false;
+            return item.referenceImages.every(f => (typeof f === 'string' ? true : !!f.title));
         }
     };
 
@@ -222,9 +167,6 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         }
 
         const newItem = createEmptyItem(orderItems.length + 1, "blouse"); // Default
-        if (dueDate) {
-            newItem.dueDate = Timestamp.fromDate(new Date(dueDate));
-        }
 
         // Collapse previous, expand new
         setExpandedItems(new Set([orderItems.length]));
@@ -256,24 +198,31 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             const processedItems: OrderItem[] = [];
 
             for (const item of orderItems) {
-                let referenceImages: ItemReferenceImage[] = [];
+                // Upload Reference Images (Garment Images)
+                let referenceImages = (item.referenceImages as ItemReferenceImage[]) || [];
 
-                if (item.tempFiles && item.tempFiles.length > 0) {
-                    const uploadPromises = item.tempFiles.map(async (f) => {
+                if (item.referenceFiles && item.referenceFiles.length > 0) {
+                    const uploadPromises = item.referenceFiles.map(async (f, idx) => {
+                        const meta = referenceImages[idx] || {};
+                        let mainUrl = meta.imageUrl || ""; // Existing URL or Data URL
+                        let sketchUrl = meta.sketchImageUrl || "";
+
                         // Upload Main Image
-                        const mainUrls = await uploadImages([f.file], `orders/${Date.now()}/${item.itemId}/main`);
-                        let sketchUrl = "";
+                        if (f.file) {
+                            const mainUrls = await uploadImages([f.file], `orders/${Date.now()}/${item.itemId}/ref/${idx}/main`);
+                            mainUrl = mainUrls[0];
+                        }
 
-                        // Upload Sketch Image if exists
+                        // Upload Sketch Image
                         if (f.sketchFile) {
-                            const sketchUrls = await uploadImages([f.sketchFile], `orders/${Date.now()}/${item.itemId}/sketch`);
+                            const sketchUrls = await uploadImages([f.sketchFile], `orders/${Date.now()}/${item.itemId}/ref/${idx}/sketch`);
                             sketchUrl = sketchUrls[0];
                         }
 
                         return {
-                            imageUrl: mainUrls[0],
-                            title: f.title || "Reference Image",
-                            description: f.description,
+                            imageUrl: mainUrl,
+                            title: meta.title || "Reference",
+                            description: meta.description,
                             sketchImageUrl: sketchUrl
                         };
                     });
@@ -311,16 +260,12 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 }
 
                 // Prepare final item
-                // NOTE: We do NOT use global garmentType. We use item.garmentType.
                 processedItems.push({
                     ...item,
                     itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     referenceImages,
                     designSections: processedDesignSections,
-                    itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    referenceImages,
-                    designSections: processedDesignSections,
-                    dueDate: item.dueDate || Timestamp.fromDate(new Date()), // Enforce item due date
+                    dueDate: item.dueDate || Timestamp.fromDate(new Date()),
                     measurements: item.measurements || {},
                     timeline: [{
                         stage: "intake",
@@ -331,7 +276,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     status: "in_progress",
                     customerName,
                     customerId: customerPhone,
-                    currentStage: "materials", // Initial stage after entry as per standard flow
+                    currentStage: "materials", // Initial stage after entry
                     customGarmentName: item.garmentType === "other" ? item.customGarmentName : undefined
                 } as OrderItem);
             }
@@ -349,8 +294,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 customerPhone,
                 customerAddress,
 
-                // Set global defaults
-                dueDate: Timestamp.fromDate(new Date(dueDate)),
+                // Set global defaults (Use first item's due date or current time)
+                dueDate: processedItems[0]?.dueDate || Timestamp.now(),
                 currentStage: "intake",
                 status: "in_progress",
 
@@ -654,14 +599,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 )}
                                             </div>
                                         </div>
-                                        {/* DESIGN SECTIONS (Always Visible) */}
-                                        <div className="border-t pt-4">
-                                            <DesignSectionUpload
-                                                sections={item.designSections || []}
-                                                onChange={(sections) => handleDesignSectionsChange(index, sections)}
-                                                onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
-                                            />
-                                        </div>
+
 
                                         {/* PER ITEM: Measurement Mode Toggle (Hidden for Rework) */}
                                         {item.garmentType !== 'rework' && (
@@ -725,143 +663,38 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                         ) : (
                                             <div className="space-y-4 animate-fade-in">
                                                 <h4 className="font-semibold text-sm text-gray-700 flex items-center">
-                                                    <span>Upload Pattern Garment Images</span>
+                                                    <span>📸 Customer Garment Image</span>
                                                     <span className="ml-2 h-px flex-1 bg-gray-200"></span>
                                                 </h4>
+                                                <p className="text-sm text-gray-500 mb-2">
+                                                    Upload photos of the garment provided by the customer for measurement reference.
+                                                </p>
+                                                <ReferenceImageUpload
+                                                    images={(item.referenceImages as ItemReferenceImage[]) || []}
+                                                    onChange={(images) => handleReferenceImagesChange(index, images)}
+                                                    onFilesUpdate={(files) => handleReferenceFilesUpdate(index, files)}
+                                                    uploading={loading}
+                                                    allowSketch={false}
+                                                />
+                                            </div>
+                                        )}
 
-                                                {/* Sequential Image List */}
-                                                {item.tempFiles?.map((file, fIdx) => (
-                                                    <div key={fIdx} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-colors">
-                                                        <div className="flex flex-col sm:flex-row items-start gap-5">
-                                                            {/* Main Image Preview */}
-                                                            <div className="shrink-0 relative">
-                                                                <img
-                                                                    src={file.preview}
-                                                                    alt="Main"
-                                                                    className="w-28 h-28 object-cover rounded-lg border bg-gray-100 shadow-sm cursor-pointer"
-                                                                    onClick={() => setPreviewModal(file.preview)}
-                                                                />
-                                                                <div className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                                                                    #{fIdx + 1}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Inputs */}
-                                                            <div className="flex-1 space-y-3 w-full">
-                                                                <div>
-                                                                    <label className="label text-[11px] uppercase tracking-wider text-gray-500">Image Title <span className="text-red-500">*</span></label>
-                                                                    <input
-                                                                        type="text"
-                                                                        className="input text-sm font-medium"
-                                                                        placeholder="e.g. Front View, Back Neck Design"
-                                                                        value={file.title}
-                                                                        onChange={(e) => {
-                                                                            const newFiles = [...(item.tempFiles || [])];
-                                                                            newFiles[fIdx].title = e.target.value;
-                                                                            handleItemChange(index, { tempFiles: newFiles });
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="label text-[11px] uppercase tracking-wider text-gray-500">Description (Optional)</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        className="input text-sm"
-                                                                        placeholder="Specific details about this part..."
-                                                                        value={file.description}
-                                                                        onChange={(e) => {
-                                                                            const newFiles = [...(item.tempFiles || [])];
-                                                                            newFiles[fIdx].description = e.target.value;
-                                                                            handleItemChange(index, { tempFiles: newFiles });
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Secondary Image Upload (Sketch/Description) */}
-                                                            <div className="shrink-0 w-full sm:w-auto text-center group/sketch">
-                                                                <label className="block text-[10px] uppercase text-gray-400 mb-1">Sketch / Detail</label>
-                                                                <div
-                                                                    className="w-24 h-24 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer bg-gray-50 hover:bg-white hover:border-indigo-400 relative overflow-hidden transition-all"
-                                                                    onClick={() => document.getElementById(`sketch-upload-${index}-${fIdx}`)?.click()}
-                                                                >
-                                                                    {file.sketchPreview ? (
-                                                                        <div className="relative w-full h-full group/preview">
-                                                                            <img
-                                                                                src={file.sketchPreview}
-                                                                                className="w-full h-full object-cover"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setPreviewModal(file.sketchPreview!);
-                                                                                }}
-                                                                            />
-                                                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover/preview:opacity-100 transition-opacity pointer-events-none">
-                                                                                <span className="text-white text-[10px]">View/Change</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="text-center p-2">
-                                                                            <Plus className="w-5 h-5 mx-auto text-gray-400 group-hover/sketch:text-indigo-400 transition-colors" />
-                                                                            <span className="text-[9px] text-gray-400 block mt-1">Add Photo</span>
-                                                                        </div>
-                                                                    )}
-                                                                    <input
-                                                                        type="file"
-                                                                        id={`sketch-upload-${index}-${fIdx}`}
-                                                                        className="hidden"
-                                                                        accept="image/*"
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        onChange={(e) => handleDescriptionSketchUpload(index, fIdx, e.target.files)}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Remove Button */}
-                                                        <button
-                                                            onClick={() => removeFile(index, fIdx)}
-                                                            className="absolute top-2 right-2 p-1.5 bg-white shadow-sm border rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
-                                                        >
-                                                            <X className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ))}
-
-                                                {/* Add Image Button - Only if previous images are valid */}
-                                                <div
-                                                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer group ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                        ? "border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 bg-indigo-50/30"
-                                                        : "border-gray-200 bg-gray-50 cursor-not-allowed opacity-60"
-                                                        }`}
-                                                    onClick={() => addImageSlot(index)}
-                                                >
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={(e) => handleFileUpload(index, e.target.files)}
-                                                        className="hidden"
-                                                        id={`file-upload-${index}`}
-                                                    />
-                                                    <div className="flex flex-col items-center justify-center w-full">
-                                                        <div className={`p-3 rounded-full mb-3 transition-colors ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                            ? "bg-indigo-100 text-indigo-500 group-hover:bg-indigo-200 group-hover:text-indigo-700"
-                                                            : "bg-gray-200 text-gray-400"
-                                                            }`}>
-                                                            <Upload className="w-6 h-6" />
-                                                        </div>
-                                                        <span className={`font-semibold text-sm ${(!item.tempFiles?.length || (item.tempFiles[item.tempFiles.length - 1].title))
-                                                            ? "text-indigo-700 underline decoration-dashed underline-offset-4"
-                                                            : "text-gray-500"
-                                                            }`}>
-                                                            {(!item.tempFiles || item.tempFiles.length === 0) ? "Upload Item Photo" : "+ Add Next Image"}
-                                                        </span>
-                                                        {item.tempFiles && item.tempFiles.length > 0 && !item.tempFiles[item.tempFiles.length - 1].title && (
-                                                            <span className="text-[10px] text-red-500 mt-2 font-medium bg-red-50 px-2 py-0.5 rounded">
-                                                                Please enter title for Image #{item.tempFiles.length} first
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
+                                        {/* PRECISE DESIGN IMAGES (Conditional) */}
+                                        {/* Visible if:
+                                            1. Measurement Type is NOT 'measurement_garment' (Measurements mode)
+                                            2. OR Measurement Type IS 'measurement_garment' AND at least one reference image is provided
+                                        */}
+                                        {((item.measurementType !== 'measurement_garment') || (item.referenceImages && item.referenceImages.length > 0)) && (
+                                            <div className="border-t pt-4 animate-fade-in">
+                                                <h4 className="font-bold text-sm text-gray-700 mb-4 flex items-center">
+                                                    <span>Precise Design Images</span>
+                                                    <span className="ml-2 h-px flex-1 bg-gray-200"></span>
+                                                </h4>
+                                                <DesignSectionUpload
+                                                    sections={item.designSections || []}
+                                                    onChange={(sections) => handleDesignSectionsChange(index, sections)}
+                                                    onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
+                                                />
                                             </div>
                                         )}
                                     </div>

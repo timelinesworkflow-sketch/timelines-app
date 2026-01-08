@@ -60,9 +60,31 @@ export const DEFAULT_MARKING_TEMPLATES: Record<GarmentType, MarkingTemplateTask[
         { taskName: "Sleeve / Putty Marking", taskOrder: 3, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 4, isMandatory: true },
     ],
+    lining_blouse: [
+        { taskName: "Front Neck Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Back Neck Marking", taskOrder: 2, isMandatory: true },
+        { taskName: "Sleeve / Putty Marking", taskOrder: 3, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 4, isMandatory: true },
+    ],
+    sada_blouse: [
+        { taskName: "Front Neck Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Back Neck Marking", taskOrder: 2, isMandatory: true },
+        { taskName: "Sleeve / Putty Marking", taskOrder: 3, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 4, isMandatory: true },
+    ],
     chudi: [
         { taskName: "Body Panel Marking", taskOrder: 1, isMandatory: true },
         { taskName: "Sleeve Marking", taskOrder: 2, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
+    ],
+    top: [
+        { taskName: "Body Panel Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Sleeve Marking", taskOrder: 2, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
+    ],
+    pant: [
+        { taskName: "Waist Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Length Marking", taskOrder: 2, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
     ],
     frock: [
@@ -76,11 +98,20 @@ export const DEFAULT_MARKING_TEMPLATES: Record<GarmentType, MarkingTemplateTask[
         { taskName: "Length Marking", taskOrder: 2, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
     ],
+    lehenga: [
+        { taskName: "Waist Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Length Marking", taskOrder: 2, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 3, isMandatory: true },
+    ],
     aari_blouse: [
         { taskName: "Repair Area Marking", taskOrder: 1, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 2, isMandatory: true },
     ],
     aari_pavada_sattai: [
+        { taskName: "Repair Area Marking", taskOrder: 1, isMandatory: true },
+        { taskName: "Marking Quality Check", taskOrder: 2, isMandatory: true },
+    ],
+    rework: [
         { taskName: "Repair Area Marking", taskOrder: 1, isMandatory: true },
         { taskName: "Marking Quality Check", taskOrder: 2, isMandatory: true },
     ],
@@ -227,7 +258,7 @@ export async function getAllTemplates(): Promise<MarkingTemplate[]> {
     }
 
     // Add defaults for any missing garment types
-    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other"];
+    const garmentTypes: GarmentType[] = ["blouse", "chudi", "frock", "pavadai_sattai", "aari_blouse", "aari_pavada_sattai", "other", "lining_blouse", "sada_blouse", "top", "pant", "lehenga", "rework"];
     const now = Timestamp.now();
 
     garmentTypes.forEach(garmentType => {

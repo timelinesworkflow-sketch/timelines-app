@@ -26,7 +26,7 @@ export default function DesignSectionsDisplay({ sections }: DesignSectionsDispla
         <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-indigo-500" />
-                <span>Design Sections</span>
+                <span>Precise Design Images</span>
             </h3>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -102,8 +102,8 @@ export default function DesignSectionsDisplay({ sections }: DesignSectionsDispla
                                 <button
                                     onClick={() => setViewMode("main")}
                                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === "main"
-                                            ? "bg-white text-black shadow-lg"
-                                            : "text-white hover:bg-white/10"
+                                        ? "bg-white text-black shadow-lg"
+                                        : "text-white hover:bg-white/10"
                                         }`}
                                 >
                                     Main View
@@ -111,8 +111,8 @@ export default function DesignSectionsDisplay({ sections }: DesignSectionsDispla
                                 <button
                                     onClick={() => setViewMode("sketch")}
                                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === "sketch"
-                                            ? "bg-white text-black shadow-lg"
-                                            : "text-white hover:bg-white/10"
+                                        ? "bg-white text-black shadow-lg"
+                                        : "text-white hover:bg-white/10"
                                         }`}
                                 >
                                     Sketch / Detail
