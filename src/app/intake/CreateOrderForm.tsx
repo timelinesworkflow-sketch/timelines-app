@@ -52,7 +52,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
     // Generator State
     const [genGarmentType, setGenGarmentType] = useState<GarmentType>("lining_blouse");
-    const [genQuantity, setGenQuantity] = useState(1);
+    const [genQuantity, setGenQuantity] = useState<number | "">(0);
 
     // Auto-filled Entry Date (Read-only)
     const entryDate = new Date();
@@ -108,14 +108,20 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     };
 
     const handleGenerateItems = () => {
+        const qty = typeof genQuantity === 'number' ? genQuantity : 0;
+        if (qty <= 0) {
+            setToast({ message: "Please enter a valid quantity", type: "error" });
+            return;
+        }
+
         const newItems: LocalOrderItem[] = [];
-        for (let i = 0; i < genQuantity; i++) {
+        for (let i = 0; i < qty; i++) {
             const item = createEmptyItem(orderItems.length + 1 + i, genGarmentType);
             item.itemName = GARMENT_OPTIONS.find(g => g.value === genGarmentType)?.label || genGarmentType;
             newItems.push(item);
         }
         setOrderItems([...orderItems, ...newItems]);
-        setToast({ message: `Generated ${genQuantity} item(s)`, type: "info" });
+        setToast({ message: `Generated ${qty} item(s)`, type: "info" });
     };
 
     const handleDesignFilesUpdate = (index: number, filesMap: Record<string, { main?: File; sketch?: File }>) => {
@@ -459,10 +465,14 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             <label className="label">Quantity</label>
                             <input
                                 type="number"
-                                min="1"
                                 value={genQuantity}
-                                onChange={(e) => setGenQuantity(parseInt(e.target.value) || 1)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setGenQuantity(val === "" ? "" : parseInt(val));
+                                }}
+                                onFocus={(e) => e.target.select()}
                                 className="input"
+                                placeholder="0"
                             />
                         </div>
                         <button
@@ -679,24 +689,18 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                             </div>
                                         )}
 
-                                        {/* PRECISE DESIGN IMAGES (Conditional) */}
-                                        {/* Visible if:
-                                            1. Measurement Type is NOT 'measurement_garment' (Measurements mode)
-                                            2. OR Measurement Type IS 'measurement_garment' AND at least one reference image is provided
-                                        */}
-                                        {((item.measurementType !== 'measurement_garment') || (item.referenceImages && item.referenceImages.length > 0)) && (
-                                            <div className="border-t pt-4 animate-fade-in">
-                                                <h4 className="font-bold text-sm text-gray-700 mb-4 flex items-center">
-                                                    <span>Precise Design Images</span>
-                                                    <span className="ml-2 h-px flex-1 bg-gray-200"></span>
-                                                </h4>
-                                                <DesignSectionUpload
-                                                    sections={item.designSections || []}
-                                                    onChange={(sections) => handleDesignSectionsChange(index, sections)}
-                                                    onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
-                                                />
-                                            </div>
-                                        )}
+                                        {/* PRECISE DESIGN IMAGES (Always Visible) */}
+                                        <div className="border-t pt-4 animate-fade-in">
+                                            <h4 className="font-bold text-sm text-gray-700 mb-4 flex items-center">
+                                                <span>Precise Design Images</span>
+                                                <span className="ml-2 h-px flex-1 bg-gray-200"></span>
+                                            </h4>
+                                            <DesignSectionUpload
+                                                sections={item.designSections || []}
+                                                onChange={(sections) => handleDesignSectionsChange(index, sections)}
+                                                onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>
