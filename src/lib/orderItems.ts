@@ -5,7 +5,7 @@
 
 import { db } from "./firebase";
 import { doc, updateDoc, Timestamp, collection, addDoc, getDocs, query, where, orderBy, setDoc } from "firebase/firestore";
-import { Order, OrderItem, ItemStatus, OverallOrderStatus, ItemTimelineEntry, GarmentType, WorkflowStage, AssignedStaff } from "@/types";
+import { Order, OrderItem, ItemStatus, OverallOrderStatus, ItemTimelineEntry, GarmentType, WorkflowStage, AssignedStaff, createDefaultDesignSections } from "@/types";
 import { sanitizeForFirestore } from "./firestoreSanitize";
 
 // Item workflow stages in order
@@ -57,7 +57,6 @@ export function getNextWorkflowStage(item: OrderItem): WorkflowStage | null {
     return nextStage || "completed";
 }
 
-
 /**
  * Create a new empty order item
  */
@@ -70,6 +69,7 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         measurementType: "measurements", // Default to manual measurements
         measurements: {},
         referenceImages: [],
+        designSections: createDefaultDesignSections(), // Initialize with Front/Back/Sleeve
         designNotes: "",
         materialCost: 0,
         labourCost: 0,

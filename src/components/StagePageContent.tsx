@@ -9,6 +9,7 @@ import { canViewCustomerInfo } from "@/lib/privacy";
 import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import Toast from "@/components/Toast";
 import MaterialsView from "@/components/MaterialsView";
+import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
 
 interface StagePageContentProps {
     stageName: string;
@@ -262,6 +263,11 @@ export default function StagePageContent({
 
                     {/* Right Column: Reference Images */}
                     <div>
+                        {/* Design Sections */}
+                        <div className="mb-8">
+                            <DesignSectionsDisplay sections={currentItem.designSections || []} />
+                        </div>
+
                         <h3 className="font-semibold text-gray-900 dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
                             <Eye className="w-4 h-4" />
                             <span>Reference Images ({Array.isArray(currentItem.referenceImages) ? currentItem.referenceImages.length : 0})</span>

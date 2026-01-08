@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, OrderItem, ItemReferenceImage, getGarmentDisplayName } from "@/types";
+import { GarmentType, MEASUREMENT_FIELDS, MEASUREMENT_LABELS, Order, OrderItem, ItemReferenceImage, getGarmentDisplayName, DesignSection } from "@/types";
 import { createOrder, updateOrder, addTimelineEntry } from "@/lib/orders";
 import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder } from "@/lib/customers";
 import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
 import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info } from "lucide-react";
+import DesignSectionUpload, { getDesignSectionUploadData } from "@/components/customer-entry/DesignSectionUpload";
 import Toast from "@/components/Toast";
 
 interface CreateOrderFormProps {
@@ -25,8 +26,25 @@ type LocalOrderItem = Partial<OrderItem> & {
         sketchFile?: File; // Secondary image explaining the main one
         sketchPreview?: string;
     }[];
+    designSectionFiles?: Record<string, { main?: File; sketch?: File }>;
     customGarmentName?: string;
 };
+
+const GARMENT_OPTIONS: { value: GarmentType; label: string }[] = [
+    { value: "lining_blouse", label: "Lining Blouse" },
+    { value: "sada_blouse", label: "Sada Blouse" },
+    { value: "frock", label: "Frock" },
+    { value: "top", label: "Top" },
+    { value: "pant", label: "Pant" },
+    { value: "lehenga", label: "Lehenga" },
+    { value: "pavadai_sattai", label: "Pavadai Sattai" },
+    { value: "chudi", label: "Chudidar" },
+    { value: "aari_blouse", label: "Aari Blouse" },
+    { value: "aari_pavada_sattai", label: "Aari Pavadai Sattai" },
+    { value: "rework", label: "Rework" },
+    { value: "other", label: "Other" },
+    { value: "blouse", label: "Blouse (Legacy)" },
+];
 
 export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const { userData } = useAuth();
@@ -36,9 +54,12 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [customerName, setCustomerName] = useState("");
     const [customerPhone, setCustomerPhone] = useState("");
     const [customerAddress, setCustomerAddress] = useState("");
-    // Default due date state - initially empty or derived? Prompt implies user selects or auto-fill? 
-    // "Auto-fill Customer Entry Date ... Due Date" usually is manual. Prompt specifically says Entry Date is auto-filled.
-    const [dueDate, setDueDate] = useState("");
+    const [customerAddress, setCustomerAddress] = useState("");
+    // Global Due Date REMOVED - Enforced at Item Level
+
+    // Generator State
+    const [genGarmentType, setGenGarmentType] = useState<GarmentType>("lining_blouse");
+    const [genQuantity, setGenQuantity] = useState(1);
 
     // Auto-filled Entry Date (Read-only)
     const entryDate = new Date();
@@ -46,7 +67,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [loading, setLoading] = useState(false);
 
     // Multi-item state
-    const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([createEmptyItem(1, "blouse")]);
+    // Multi-item state - Start EMPTY as per new generator logic
+    const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([]);
     const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
     const [previewModal, setPreviewModal] = useState<string | null>(null);
 
@@ -128,6 +150,20 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         }
     };
 
+    const handleGenerateItems = () => {
+        const newItems: LocalOrderItem[] = [];
+        for (let i = 0; i < genQuantity; i++) {
+            const item = createEmptyItem(orderItems.length + 1 + i, genGarmentType);
+            item.itemName = GARMENT_OPTIONS.find(g => g.value === genGarmentType)?.label || genGarmentType;
+            // Ensure due date is present (default to tomorrow/today or empty force user?)
+            // createEmptyItem sets it to Timestamp.now(). We should probably require user to set it.
+            // Leaving as default now() is safe, but user can change.
+            newItems.push(item);
+        }
+        setOrderItems([...orderItems, ...newItems]);
+        setToast({ message: `Generated ${genQuantity} item(s)`, type: "info" });
+    };
+
     const removeFile = (itemIndex: number, fileIndex: number) => {
         const currentFiles = [...(orderItems[itemIndex].tempFiles || [])];
         const removed = currentFiles.splice(fileIndex, 1);
@@ -138,11 +174,27 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         handleItemChange(itemIndex, { tempFiles: currentFiles });
     };
 
+    const handleDesignFilesUpdate = (index: number, filesMap: Record<string, { main?: File; sketch?: File }>) => {
+        const currentItem = orderItems[index];
+        const newMap = { ...(currentItem.designSectionFiles || {}), ...filesMap };
+        handleItemChange(index, { designSectionFiles: newMap });
+    };
+
+    const handleDesignSectionsChange = (index: number, sections: any[]) => {
+        handleItemChange(index, { designSections: sections });
+    };
+
     // --- VALIDATION LOGIC ---
 
     const validateItem = (item: LocalOrderItem): boolean => {
         if (!item.garmentType) return false;
         if (item.garmentType === "other" && !item.customGarmentName?.trim()) return false;
+
+        // Due Date Mandatory
+        if (!item.dueDate) return false;
+
+        // Rework items only need design sections (validation handled loosely or by ensuring default exists)
+        if (item.garmentType === 'rework') return true;
 
         if (item.measurementType === 'measurements') {
             const fields = MEASUREMENT_FIELDS[item.garmentType || "blouse"];
@@ -180,8 +232,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     };
 
     const handleSubmitForm = async () => {
-        if (!customerName || !customerPhone || !dueDate) {
+        if (!customerName || !customerPhone) {
             setToast({ message: "Please fill all required customer fields", type: "error" });
+            return;
+        }
+
+        if (orderItems.length === 0) {
+            setToast({ message: "Please generate at least one item", type: "error" });
             return;
         }
 
@@ -224,13 +281,46 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     referenceImages = await Promise.all(uploadPromises);
                 }
 
+                // Process Design Sections
+                let processedDesignSections = item.designSections || [];
+
+                if (item.designSectionFiles) {
+                    const sectionPromises = processedDesignSections.map(async (sec) => {
+                        const files = item.designSectionFiles?.[sec.sectionId];
+                        let mainUrl = sec.mainImageUrl || "";
+                        let sketchUrl = sec.sketchImageUrl || "";
+
+                        if (files?.main) {
+                            const urls = await uploadImages([files.main], `orders/${Date.now()}/${item.itemId}/design/${sec.sectionId}/main`);
+                            mainUrl = urls[0];
+                        }
+
+                        if (files?.sketch) {
+                            const urls = await uploadImages([files.sketch], `orders/${Date.now()}/${item.itemId}/design/${sec.sectionId}/sketch`);
+                            sketchUrl = urls[0];
+                        }
+
+                        return {
+                            ...sec,
+                            mainImageUrl: mainUrl,
+                            sketchImageUrl: sketchUrl
+                        };
+                    });
+
+                    processedDesignSections = await Promise.all(sectionPromises);
+                }
+
                 // Prepare final item
                 // NOTE: We do NOT use global garmentType. We use item.garmentType.
                 processedItems.push({
                     ...item,
                     itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     referenceImages,
-                    dueDate: item.dueDate ? item.dueDate : Timestamp.fromDate(new Date(dueDate)),
+                    designSections: processedDesignSections,
+                    itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    referenceImages,
+                    designSections: processedDesignSections,
+                    dueDate: item.dueDate || Timestamp.fromDate(new Date()), // Enforce item due date
                     measurements: item.measurements || {},
                     timeline: [{
                         stage: "intake",
@@ -381,8 +471,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     </div>
                 </div>
 
-                {/* 2. Global Order Dates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 bg-white dark:bg-gray-800 p-5 rounded-xl border shadow-sm">
+                {/* 2. Global Order Dates (Entry Date Only) */}
+                <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border shadow-sm">
                     <div>
                         <label className="label text-gray-600 flex items-center gap-2">
                             <Calendar className="w-4 h-4" />
@@ -391,19 +481,53 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         <input
                             type="text"
                             value={entryDate.toLocaleDateString()}
-                            className="input bg-gray-100 dark:bg-gray-700 cursor-not-allowed text-gray-500"
+                            className="input bg-gray-100 dark:bg-gray-700 cursor-not-allowed text-gray-500 w-full sm:w-1/2"
                             disabled
                         />
                     </div>
-                    <div>
-                        <label className="label text-indigo-700 font-bold">Due Date (Target) *</label>
-                        <input
-                            type="date"
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
-                            className="input border-indigo-200 focus:border-indigo-500 font-medium"
-                            required
-                        />
+                    {/* Global Due Date Removed */}
+                </div>
+
+                {/* 3. GENERATOR BLOCK (New) */}
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                    <h3 className="font-bold text-lg text-indigo-900 dark:text-indigo-300 mb-4 flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        Garment Generator
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label className="label">Garment Type</label>
+                            <div className="relative">
+                                <select
+                                    value={genGarmentType}
+                                    onChange={(e) => setGenGarmentType(e.target.value as GarmentType)}
+                                    className="input appearance-none"
+                                >
+                                    {GARMENT_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="label">Quantity</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={genQuantity}
+                                onChange={(e) => setGenQuantity(parseInt(e.target.value) || 1)}
+                                className="input"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleGenerateItems}
+                            className="btn btn-primary h-11 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Generate Items
+                        </button>
                     </div>
                 </div>
 
@@ -414,20 +538,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             <Package className="w-6 h-6 text-indigo-600" />
                             <span>Workflow Items ({orderItems.length})</span>
                         </h3>
-                        {/* Add Item Button: Disabled if current item invalid */}
-                        <div className="flex flex-col items-end">
-                            <button
-                                type="button"
-                                onClick={handleAddNewItem}
-                                disabled={!isCurrentItemValid()}
-                                className={`btn btn-primary text-sm flex items-center space-x-1 shadow-md transition-all ${!isCurrentItemValid() ? 'opacity-50 cursor-not-allowed bg-gray-400 shadow-none' : 'hover:shadow-lg'}`}
-                            >
-                                <Plus className="w-4 h-4" />
-                                <span>Add Next Item</span>
-                            </button>
-                            {!isCurrentItemValid() && orderItems.length > 0 && (
-                                <span className="text-xs text-red-500 mt-1 font-medium bg-red-50 px-2 py-1 rounded">Complete current item first</span>
-                            )}
+                        {/* Add Item Button: Removed in favor of Generator */}
+                        <div className="text-sm text-gray-500">
+                            Use the generator above to add more items.
                         </div>
                     </div>
 
@@ -494,6 +607,19 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 />
                                             </div>
                                             <div>
+                                                <label className="label">Due Date <span className="text-red-500">*</span></label>
+                                                <input
+                                                    type="date"
+                                                    value={item.dueDate ? item.dueDate.toDate().toISOString().split('T')[0] : ""}
+                                                    onChange={(e) => {
+                                                        const date = e.target.value ? new Date(e.target.value) : undefined;
+                                                        handleItemChange(index, { dueDate: date ? Timestamp.fromDate(date) : undefined });
+                                                    }}
+                                                    className="input font-medium border-indigo-200 focus:border-indigo-500"
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
                                                 <label className="label">Garment Type <span className="text-red-500">*</span></label>
                                                 <div className="relative">
                                                     <select
@@ -501,13 +627,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                         onChange={(e) => handleItemChange(index, { garmentType: e.target.value as GarmentType })}
                                                         className="input appearance-none border-indigo-100 focus:border-indigo-500"
                                                     >
-                                                        <option value="blouse">Blouse</option>
-                                                        <option value="chudi">Chudi</option>
-                                                        <option value="frock">Frock</option>
-                                                        <option value="pavadai_sattai">Pavadai Sattai</option>
-                                                        <option value="aari_blouse">AARI Blouse</option>
-                                                        <option value="aari_pavada_sattai">AARI Pavada Sattai</option>
-                                                        <option value="other">Other</option>
+                                                        {GARMENT_OPTIONS.map((opt) => (
+                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                        ))}
                                                     </select>
                                                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                                                 </div>
@@ -532,33 +654,48 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 )}
                                             </div>
                                         </div>
-
-                                        {/* PER ITEM: Measurement Mode Toggle */}
-                                        <div className="bg-gray-100 dark:bg-gray-750 p-1 rounded-lg inline-flex w-full sm:w-auto">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleItemChange(index, { measurementType: "measurements" })}
-                                                className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurements"
-                                                    ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
-                                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                                                    }`}
-                                            >
-                                                Customer Gives Measurements
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleItemChange(index, { measurementType: "measurement_garment" })}
-                                                className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurement_garment"
-                                                    ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
-                                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                                                    }`}
-                                            >
-                                                Customer Gives Pattern Garment
-                                            </button>
+                                        {/* DESIGN SECTIONS (Always Visible) */}
+                                        <div className="border-t pt-4">
+                                            <DesignSectionUpload
+                                                sections={item.designSections || []}
+                                                onChange={(sections) => handleDesignSectionsChange(index, sections)}
+                                                onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
+                                            />
                                         </div>
 
+                                        {/* PER ITEM: Measurement Mode Toggle (Hidden for Rework) */}
+                                        {item.garmentType !== 'rework' && (
+                                            <div className="bg-gray-100 dark:bg-gray-750 p-1 rounded-lg inline-flex w-full sm:w-auto">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleItemChange(index, { measurementType: "measurements" })}
+                                                    className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurements"
+                                                        ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
+                                                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                                                        }`}
+                                                >
+                                                    Customer Gives Measurements
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleItemChange(index, { measurementType: "measurement_garment" })}
+                                                    className={`flex-1 sm:flex-none py-2 px-6 rounded-md text-sm font-medium transition-all duration-200 ${item.measurementType === "measurement_garment"
+                                                        ? "bg-white text-indigo-700 shadow-sm border border-gray-200 scale-[1.02]"
+                                                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                                                        }`}
+                                                >
+                                                    Customer Gives Pattern Garment
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {/* CONDITIONAL UI */}
-                                        {item.measurementType === "measurements" ? (
+                                        {/* If Rework: Show nothing else (Pattern/Measurements hidden) */}
+                                        {item.garmentType === 'rework' ? (
+                                            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg text-sm border border-yellow-200">
+                                                Rework items rely on design images. No measurements or pattern garment needed.
+                                            </div>
+                                        ) : item.measurementType === "measurements" ? (
                                             <div className="animate-fade-in bg-gray-50 dark:bg-gray-800/50 p-5 rounded-xl border border-dashed border-gray-200">
                                                 <h4 className="font-semibold mb-4 text-sm text-gray-700 flex items-center">
                                                     <span>Enter Measurements (Inches)</span>
@@ -588,7 +725,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                         ) : (
                                             <div className="space-y-4 animate-fade-in">
                                                 <h4 className="font-semibold text-sm text-gray-700 flex items-center">
-                                                    <span>Upload Reference Images (Sequential)</span>
+                                                    <span>Upload Pattern Garment Images</span>
                                                     <span className="ml-2 h-px flex-1 bg-gray-200"></span>
                                                 </h4>
 
@@ -732,10 +869,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             </div>
                         ))}
                     </div>
-                </div>
+                </div >
 
                 {/* Submit Section */}
-                <div className="pt-6 border-t sticky bottom-0 bg-white/95 backdrop-blur-sm dark:bg-gray-900/95 pb-4 z-20">
+                < div className="pt-6 border-t sticky bottom-0 bg-white/95 backdrop-blur-sm dark:bg-gray-900/95 pb-4 z-20" >
                     <div className="flex justify-between items-center mb-4 text-sm font-medium bg-gray-50 p-3 rounded-lg border">
                         <span className="text-gray-600">Total Items: <span className="font-bold text-gray-900">{orderItems.length}</span></span>
                     </div>
@@ -758,29 +895,31 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         )}
                     </button>
                     <p className="text-[10px] text-center text-gray-400 mt-3">Each item will start its own independent workflow.</p>
-                </div>
-            </div>
+                </div >
+            </div >
 
             {/* Fullscreen Image Modal */}
-            {previewModal && (
-                <div
-                    className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
-                    onClick={() => setPreviewModal(null)}
-                >
-                    <button
-                        className="absolute top-4 right-4 text-white/50 hover:text-white"
+            {
+                previewModal && (
+                    <div
+                        className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
                         onClick={() => setPreviewModal(null)}
                     >
-                        <X className="w-8 h-8" />
-                    </button>
-                    <img
-                        src={previewModal}
-                        alt="Preview"
-                        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                </div>
-            )}
-        </div>
+                        <button
+                            className="absolute top-4 right-4 text-white/50 hover:text-white"
+                            onClick={() => setPreviewModal(null)}
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                        <img
+                            src={previewModal}
+                            alt="Preview"
+                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                )
+            }
+        </div >
     );
 }

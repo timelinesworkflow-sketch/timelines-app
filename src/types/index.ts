@@ -38,7 +38,7 @@ export interface User {
     subStageDefaults?: Record<string, boolean>;
 }
 
-export type GarmentType = "blouse" | "chudi" | "frock" | "pavadai_sattai" | "aari_blouse" | "aari_pavada_sattai" | "other";
+export type GarmentType = "blouse" | "lining_blouse" | "sada_blouse" | "chudi" | "frock" | "top" | "pant" | "lehenga" | "pavadai_sattai" | "aari_blouse" | "aari_pavada_sattai" | "rework" | "other";
 
 export type OrderStatus =
     | "draft"
@@ -512,6 +512,31 @@ export interface ItemReferenceImage {
     sketchImageUrl?: string;    // Optional sketch/detail image
 }
 
+// ============================================
+// DESIGN SECTIONS (Item-level design images)
+// ============================================
+
+// Default design section titles (always visible in item form)
+export const DEFAULT_DESIGN_SECTIONS = ["Front Neck", "Back Neck", "Sleeve"] as const;
+
+// Design section for structured item-level design images
+export interface DesignSection {
+    sectionId: string;          // Unique ID (e.g., "front_neck", "back_neck", "sleeve", or custom UUID)
+    title: string;              // "Front Neck", "Back Neck", "Sleeve", or custom title
+    isDefault: boolean;         // true for Front Neck/Back Neck/Sleeve
+    mainImageUrl: string;       // Main design image URL (mandatory when filled)
+    sketchImageUrl?: string;    // Optional sketch/detail image
+}
+
+// Helper to create default design sections for a new item
+export function createDefaultDesignSections(): DesignSection[] {
+    return [
+        { sectionId: "front_neck", title: "Front Neck", isDefault: true, mainImageUrl: "" },
+        { sectionId: "back_neck", title: "Back Neck", isDefault: true, mainImageUrl: "" },
+        { sectionId: "sleeve", title: "Sleeve", isDefault: true, mainImageUrl: "" },
+    ];
+}
+
 // Measurement type toggle for each item
 export type ItemMeasurementType = "measurements" | "measurement_garment";
 
@@ -556,6 +581,9 @@ export interface OrderItem {
 
     // Per-item Planned Materials
     plannedMaterials?: OrderPlannedMaterials | null;
+
+    // Design sections (Front Neck, Back Neck, Sleeve + custom)
+    designSections: DesignSection[];
 
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -819,7 +847,24 @@ export const MEASUREMENT_FIELDS: Record<GarmentType, string[]> = {
         "sleeveLoose",       // Sleeve Loose
         "pk",                // PK
     ],
+    // New types mapped to existing measurement schemas
+    lining_blouse: [
+        "blouseLength", "frontLength", "backNeck", "frontNeck", "chest", "hip", "sleeveLength", "sleeveAround", "armHole", "pk"
+    ],
+    sada_blouse: [
+        "blouseLength", "frontLength", "backNeck", "frontNeck", "chest", "hip", "sleeveLength", "sleeveAround", "armHole", "pk"
+    ],
+    top: [
+        "topLength", "upperChest", "chest", "hip", "seat", "backNeck", "frontNeck", "sleeveLength", "sleeveAround", "arm", "pk"
+    ],
+    pant: [
+        "pantLength", "legAround", "hip", "seat", "pk"
+    ],
+    lehenga: [
+        "pavadaiFullLength", "hipLoose", "bodyPavadaiLength", "sattaiHeight", "sattaiLoose", "hip", "chest", "backNeck", "frontNeck", "arm", "sleeveLength", "sleeveLoose", "pk"
+    ],
     other: ["customField1", "customField2", "customField3"],
+    rework: [], // Rework items don't have measurements - they use design images only
 };
 
 // Human-readable labels for measurement fields
