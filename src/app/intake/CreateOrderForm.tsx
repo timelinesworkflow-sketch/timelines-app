@@ -819,40 +819,40 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                         </div>
 
                                         {/* PRICING & MATERIALS TABLE */}
-                                        <div className="border-t pt-6 bg-gray-50/50 -mx-6 px-6">
+                                        <div className="border-t pt-6 bg-slate-50/80 -mx-6 px-6">
                                             <div className="flex items-center justify-between mb-4">
-                                                <h4 className="font-bold text-sm text-gray-700 flex items-center gap-2">
-                                                    <Info className="w-4 h-4 text-indigo-500" />
+                                                <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                                    <Calculator className="w-4 h-4 text-indigo-600" />
                                                     <span>Pricing & Materials</span>
                                                 </h4>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-semibold px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+                                                    <span className="text-xs font-bold px-3 py-1 bg-indigo-600 text-white rounded-full shadow-sm ring-2 ring-indigo-100">
                                                         Item Total: ₹{(item.itemPricing?.itemTotal || 0).toLocaleString()}
                                                     </span>
                                                 </div>
                                             </div>
 
                                             <div className="overflow-x-auto">
-                                                <table className="w-full text-xs text-left border-collapse bg-white rounded-lg shadow-sm border border-gray-200">
-                                                    <thead className="bg-gray-100/80 text-gray-600 font-bold uppercase tracking-wider">
+                                                <table className="w-full text-xs text-left border-collapse bg-white rounded-lg shadow-md border border-slate-200">
+                                                    <thead className="bg-slate-200 text-slate-900 font-black uppercase tracking-wider">
                                                         <tr>
-                                                            <th className="px-3 py-2 border-b">Material</th>
-                                                            <th className="px-3 py-2 border-b w-20 text-center">Qty</th>
-                                                            <th className="px-3 py-2 border-b w-24 text-right">Price</th>
-                                                            <th className="px-3 py-2 border-b">Color (Opt)</th>
-                                                            <th className="px-3 py-2 border-b w-10"></th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-300">Material</th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-300 w-20 text-center">Qty</th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-300 w-24 text-right">Price</th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-300">Color (Opt)</th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-300 w-10"></th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="divide-y divide-gray-100">
+                                                    <tbody className="divide-y divide-slate-100">
                                                         {item.itemPricing?.materials.map((mat, mIdx) => (
-                                                            <tr key={mIdx} className="hover:bg-gray-50/50 transition-colors">
+                                                            <tr key={mIdx} className="hover:bg-indigo-50/30 transition-colors">
                                                                 <td className="px-3 py-2">
                                                                     <input
                                                                         type="text"
                                                                         value={mat.name}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'name', e.target.value)}
                                                                         disabled={item.itemPricing?.pricingConfirmed || mat.isDefault}
-                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium disabled:opacity-70"
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 font-bold text-slate-900 disabled:opacity-70"
                                                                         placeholder="Material name..."
                                                                     />
                                                                 </td>
@@ -866,12 +866,12 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         }}
                                                                         onFocus={(e) => e.target.select()}
                                                                         disabled={item.itemPricing?.pricingConfirmed}
-                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-center font-bold disabled:opacity-70"
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-center font-black text-slate-900 disabled:opacity-70"
                                                                         placeholder="0"
                                                                     />
                                                                 </td>
                                                                 <td className="px-3 py-2">
-                                                                    <div className="flex items-center justify-end font-bold text-gray-700">
+                                                                    <div className="flex items-center justify-end font-black text-slate-900">
                                                                         <span className="mr-0.5">₹</span>
                                                                         <input
                                                                             type="number"
@@ -893,15 +893,15 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         value={mat.color || ""}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'color', e.target.value)}
                                                                         disabled={item.itemPricing?.pricingConfirmed}
-                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-gray-500 disabled:opacity-70 italic"
+                                                                        className="w-full bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-medium disabled:opacity-70 italic"
                                                                         placeholder="Optional"
                                                                     />
                                                                 </td>
-                                                                <td className="px-3 py-2 text-center text-gray-400">
+                                                                <td className="px-3 py-2 text-center text-slate-400">
                                                                     {!mat.isDefault && !item.itemPricing?.pricingConfirmed && (
                                                                         <button
                                                                             onClick={() => deletePricingRow(index, mIdx)}
-                                                                            className="p-1 hover:text-red-500 transition-colors"
+                                                                            className="p-1 hover:text-red-600 transition-colors"
                                                                         >
                                                                             <Trash2 className="w-3.5 h-3.5" />
                                                                         </button>
@@ -976,10 +976,10 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         <div className="overflow-x-auto relative z-10">
                             <table className="w-full text-sm text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-gray-700 text-gray-400 font-medium italic">
-                                        <th className="px-3 py-2">Material / Garment</th>
-                                        <th className="px-3 py-2 text-center w-24">Total Qty</th>
-                                        <th className="px-3 py-2 text-right w-32">Total Price</th>
+                                    <tr className="border-b border-white/20 text-indigo-300 font-black uppercase tracking-widest text-[10px]">
+                                        <th className="px-3 py-3">Material / Garment</th>
+                                        <th className="px-3 py-3 text-center w-24">Total Qty</th>
+                                        <th className="px-3 py-3 text-right w-32">Total Price</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-800">
