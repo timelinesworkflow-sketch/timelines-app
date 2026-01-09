@@ -6,10 +6,11 @@ import TopBar from "@/components/TopBar";
 import { useParams } from "next/navigation";
 import { doc, getDoc, collection, getDocs, query, orderBy as firestoreOrderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, OrderItem, TimelineEntry, STAGE_DISPLAY_NAMES, MEASUREMENT_LABELS, getGarmentDisplayName } from "@/types";
+import { Order, OrderItem, TimelineEntry, STAGE_DISPLAY_NAMES, MEASUREMENT_LABELS, getGarmentDisplayName, DesignSection } from "@/types";
 import { formatOrderProgress } from "@/lib/orderItems";
-import { ArrowLeft, Package, User, Calendar, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Package, User, Calendar, Clock, ChevronDown, ChevronUp, Eye } from "lucide-react";
 import Link from "next/link";
+import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
 
 export default function OrderDetailPage() {
     const params = useParams();
@@ -247,6 +248,14 @@ export default function OrderDetailPage() {
                                                             </div>
                                                         </div>
                                                     )}
+
+                                                    {/* Design Sections */}
+                                                    <div className="mb-4">
+                                                        <DesignSectionsDisplay
+                                                            sections={item.designSections || []}
+                                                            editable={false}
+                                                        />
+                                                    </div>
 
                                                     {/* Reference Images */}
                                                     {item.referenceImages && item.referenceImages.length > 0 && (

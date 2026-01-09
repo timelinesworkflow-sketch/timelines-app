@@ -8,9 +8,12 @@ import {
     MEASUREMENT_LABELS,
     OrderItem,
     ItemMeasurementType,
-    ItemReferenceImage
+    ItemReferenceImage,
+    DesignSection,
+    createDefaultDesignSections
 } from "@/types";
 import ReferenceImageUpload from "./ReferenceImageUpload";
+import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
 
 interface ItemFormProps {
     item: Partial<OrderItem>;
@@ -55,6 +58,9 @@ export default function ItemForm({
         (item.referenceImages as ItemReferenceImage[]) || []
     );
     const [designNotes, setDesignNotes] = useState(item.designNotes || "");
+    const [designSections, setDesignSections] = useState<DesignSection[]>(
+        item.designSections || createDefaultDesignSections()
+    );
 
     // Get measurement fields for current garment type
     const getMeasurementFields = () => {
@@ -72,9 +78,10 @@ export default function ItemForm({
             measurementType,
             measurements: measurements as { [key: string]: number | string },
             referenceImages,
+            designSections,
             designNotes,
         });
-    }, [garmentType, measurementType, measurements, referenceImages, designNotes]);
+    }, [garmentType, measurementType, measurements, referenceImages, designSections, designNotes]);
 
     // Initialize measurements when garment type changes
     useEffect(() => {
@@ -92,6 +99,10 @@ export default function ItemForm({
 
     const handleImagesChange = (images: ItemReferenceImage[]) => {
         setReferenceImages(images);
+    };
+
+    const handleDesignSectionsChange = (sections: DesignSection[]) => {
+        setDesignSections(sections);
     };
 
     const handleFileUpload = (files: File[], index: number) => {
@@ -170,30 +181,52 @@ export default function ItemForm({
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             How will measurements be provided?
                         </label>
-                        <div className="flex gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setMeasurementType("measurements")}
-                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${measurementType === "measurements"
+                        {garmentType === 'rework' ? (
+                            <div className="p-3 bg-yellow-500/10 text-yellow-400 rounded-lg text-xs border border-yellow-500/20 italic">
+                                Rework items rely on design images. No measurements or pattern garment needed.
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setMeasurementType("measurements")}
+                                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${measurementType === "measurements"
                                         ? "bg-blue-600 text-white border-2 border-blue-400"
                                         : "bg-slate-700 text-gray-300 border-2 border-slate-600 hover:border-slate-500"
-                                    }`}
-                            >
-                                <Ruler className="w-5 h-5" />
-                                Measurements
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setMeasurementType("measurement_garment")}
-                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${measurementType === "measurement_garment"
+                                        }`}
+                                >
+                                    <Ruler className="w-5 h-5" />
+                                    Measurements
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setMeasurementType("measurement_garment")}
+                                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${measurementType === "measurement_garment"
                                         ? "bg-green-600 text-white border-2 border-green-400"
                                         : "bg-slate-700 text-gray-300 border-2 border-slate-600 hover:border-slate-500"
-                                    }`}
-                            >
-                                <Camera className="w-5 h-5" />
-                                Measurement Garment
-                            </button>
-                        </div>
+                                        }`}
+                                >
+                                    <Camera className="w-5 h-5" />
+                                    Measurement Garment
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Precise Design Images (Always Visible) */}
+                    <div className="border-t border-slate-700 pt-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Precise Design Images
+                        </label>
+                        <DesignSectionsDisplay
+                            sections={designSections}
+                            editable={true}
+                            onUpdate={handleDesignSectionsChange}
+                            // Note: ItemForm doesn't currently handle file objects for the parent,
+                            // but we'll return object URLs for previews.
+                            onUploadMainImage={async (idx, file) => URL.createObjectURL(file)}
+                            onUploadSketchImage={async (idx, file) => URL.createObjectURL(file)}
+                        />
                     </div>
 
                     {/* Measurements Section (if measurementType = "measurements") */}

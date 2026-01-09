@@ -621,6 +621,7 @@ export interface OrderItem {
     updatedAt: Timestamp;
 }
 
+
 // Overall order status based on item completion
 export type OverallOrderStatus = "inProgress" | "partial" | "completed" | "delivered";
 

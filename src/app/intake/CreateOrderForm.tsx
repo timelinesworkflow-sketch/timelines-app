@@ -8,9 +8,9 @@ import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder
 import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info, Calculator } from "lucide-react";
+import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info, Calculator, Image as ImageIcon } from "lucide-react";
 import ReferenceImageUpload from "@/components/customer-entry/ReferenceImageUpload";
-import DesignSectionUpload, { getDesignSectionUploadData } from "@/components/customer-entry/DesignSectionUpload";
+import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
 import Toast from "@/components/Toast";
 import { calculateOrderPricingSummary } from "@/lib/orderItems";
 import BillTemplate from "@/components/billing/BillTemplate";
@@ -148,8 +148,32 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         handleItemChange(index, { designSectionFiles: newMap });
     };
 
-    const handleDesignSectionsChange = (index: number, sections: any[]) => {
+    const handleDesignSectionsChange = (index: number, sections: DesignSection[]) => {
         handleItemChange(index, { designSections: sections });
+    };
+
+    const handleDesignMainUpload = async (itemIdx: number, sectionIdx: number, file: File): Promise<string> => {
+        const item = orderItems[itemIdx];
+        const sectionId = item.designSections![sectionIdx].sectionId;
+        const previewUrl = URL.createObjectURL(file);
+
+        const newFilesMap = { ...(item.designSectionFiles || {}) };
+        newFilesMap[sectionId] = { ...(newFilesMap[sectionId] || {}), main: file };
+
+        handleItemChange(itemIdx, { designSectionFiles: newFilesMap });
+        return previewUrl;
+    };
+
+    const handleDesignSketchUpload = async (itemIdx: number, sectionIdx: number, file: File): Promise<string> => {
+        const item = orderItems[itemIdx];
+        const sectionId = item.designSections![sectionIdx].sectionId;
+        const previewUrl = URL.createObjectURL(file);
+
+        const newFilesMap = { ...(item.designSectionFiles || {}) };
+        newFilesMap[sectionId] = { ...(newFilesMap[sectionId] || {}), sketch: file };
+
+        handleItemChange(itemIdx, { designSectionFiles: newFilesMap });
+        return previewUrl;
     };
 
     // --- PRICING LOGIC ---
@@ -811,10 +835,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 <span>Precise Design Images</span>
                                                 <span className="ml-2 h-px flex-1 bg-gray-200"></span>
                                             </h4>
-                                            <DesignSectionUpload
+                                            <DesignSectionsDisplay
                                                 sections={item.designSections || []}
-                                                onChange={(sections) => handleDesignSectionsChange(index, sections)}
-                                                onFilesUpdate={(filesMap) => handleDesignFilesUpdate(index, filesMap)}
+                                                editable={true}
+                                                onUpdate={(sections) => handleDesignSectionsChange(index, sections)}
+                                                onUploadMainImage={(secIdx, file) => handleDesignMainUpload(index, secIdx, file)}
+                                                onUploadSketchImage={(secIdx, file) => handleDesignSketchUpload(index, secIdx, file)}
+                                                disabled={loading}
                                             />
                                         </div>
 
