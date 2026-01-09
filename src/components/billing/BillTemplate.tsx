@@ -31,6 +31,7 @@ export interface BillTemplateProps {
     totalAmount: number;
     paidAmount: number;
     balanceAmount: number;
+    isEstimated?: boolean;
 }
 
 /**
@@ -50,6 +51,7 @@ const BillTemplate = forwardRef<HTMLDivElement, BillTemplateProps>(
             totalAmount,
             paidAmount,
             balanceAmount,
+            isEstimated,
         },
         ref
     ) => {
@@ -82,8 +84,29 @@ const BillTemplate = forwardRef<HTMLDivElement, BillTemplateProps>(
                     fontSize: "12px",
                     color: "#000000",
                     boxSizing: "border-box",
+                    position: "relative",
                 }}
             >
+                {isEstimated && (
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: "10mm",
+                            right: "15mm",
+                            border: "2px solid #cc0000",
+                            color: "#cc0000",
+                            padding: "5px 10px",
+                            fontWeight: "bold",
+                            fontSize: "14px",
+                            borderRadius: "4px",
+                            transform: "rotate(-5deg)",
+                            opacity: 0.8,
+                            zIndex: 10,
+                        }}
+                    >
+                        ESTIMATED BILL – SUBJECT TO CHANGE
+                    </div>
+                )}
                 {/* Header */}
                 <div style={{ textAlign: "center", marginBottom: "20px" }}>
                     <h1

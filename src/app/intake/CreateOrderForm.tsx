@@ -85,6 +85,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const billTemplateRef = useRef<HTMLDivElement>(null);
     const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
     const [selectedBillItem, setSelectedBillItem] = useState<{ item: LocalOrderItem, index: number } | null>(null);
+    const [orderPricingConfirmed, setOrderPricingConfirmed] = useState(false);
+    const [isOverallBill, setIsOverallBill] = useState(false);
 
     // Lookup customer orders
     useEffect(() => {
@@ -265,6 +267,59 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             } finally {
                 setGeneratingPdf(null);
                 setSelectedBillItem(null);
+            }
+        }, 100);
+    };
+
+    const handleConfirmAllItems = () => {
+        if (orderItems.length === 0) {
+            setToast({ message: "No items to confirm", type: "error" });
+            return;
+        }
+
+        const allConfirmed = orderItems.every(i => i.itemPricing?.pricingConfirmed);
+        if (!allConfirmed) {
+            setToast({ message: "Please confirm pricing for ALL individual items first", type: "error" });
+            return;
+        }
+
+        setOrderPricingConfirmed(true);
+        setToast({ message: "All items confirmed! Overall bill is now available.", type: "success" });
+    };
+
+    const handleDownloadOverallBill = async () => {
+        if (!orderPricingConfirmed) return;
+
+        setIsOverallBill(true);
+        // We reuse the hidden template but with different data logic
+        // We'll trigger it by setting a dummy selectedBillItem or just handling it in the render
+
+        // Wait for render
+        setTimeout(async () => {
+            if (!billTemplateRef.current) {
+                setToast({ message: "Template error. Try again.", type: "error" });
+                return;
+            }
+
+            setGeneratingPdf("overall");
+            try {
+                const opt = {
+                    margin: 0,
+                    filename: `OVERALL_ESTIMATED_BILL_${Date.now()}.pdf`,
+                    image: { type: 'jpeg' as const, quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+                };
+                const html2pdfModule = await import("html2pdf.js");
+                const html2pdf = html2pdfModule.default;
+                await html2pdf().set(opt).from(billTemplateRef.current).save();
+                setToast({ message: "Overall Bill downloaded successfully!", type: "success" });
+            } catch (error) {
+                console.error("PDF generation failed:", error);
+                setToast({ message: "Failed to download overall bill", type: "error" });
+            } finally {
+                setGeneratingPdf(null);
+                setIsOverallBill(false);
             }
         }, 100);
     };
@@ -878,7 +933,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         type="text"
                                                                         value={mat.name}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'name', e.target.value)}
-                                                                        disabled={item.itemPricing?.pricingConfirmed || mat.isDefault}
+                                                                        disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed || mat.isDefault}
                                                                         className="w-full bg-slate-900/50 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 font-bold text-gray-100 disabled:opacity-50 disabled:bg-transparent placeholder:text-gray-500"
                                                                         placeholder="Material name..."
                                                                     />
@@ -892,7 +947,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                             handlePricingChange(index, mIdx, 'quantity', val === "" ? "" : Number(val));
                                                                         }}
                                                                         onFocus={(e) => e.target.select()}
-                                                                        disabled={item.itemPricing?.pricingConfirmed}
+                                                                        disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
                                                                         className="w-full bg-slate-900/50 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-center font-black text-gray-100 disabled:opacity-50 disabled:bg-transparent placeholder:text-gray-500"
                                                                         placeholder="0"
                                                                     />
@@ -908,7 +963,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                                 handlePricingChange(index, mIdx, 'price', val === "" ? "" : Number(val));
                                                                             }}
                                                                             onFocus={(e) => e.target.select()}
-                                                                            disabled={item.itemPricing?.pricingConfirmed}
+                                                                            disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
                                                                             className="w-full bg-transparent border-none focus:ring-0 p-0 text-right disabled:opacity-50 placeholder:text-gray-500"
                                                                             placeholder="0"
                                                                         />
@@ -919,13 +974,13 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         type="text"
                                                                         value={mat.color || ""}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'color', e.target.value)}
-                                                                        disabled={item.itemPricing?.pricingConfirmed}
+                                                                        disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
                                                                         className="w-full bg-slate-900/50 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-gray-300 font-medium disabled:opacity-50 disabled:bg-transparent italic placeholder:text-gray-500"
                                                                         placeholder="Optional"
                                                                     />
                                                                 </td>
                                                                 <td className="px-3 py-2 text-center text-slate-400">
-                                                                    {!mat.isDefault && !item.itemPricing?.pricingConfirmed && (
+                                                                    {!mat.isDefault && !item.itemPricing?.pricingConfirmed && !orderPricingConfirmed && (
                                                                         <button
                                                                             onClick={() => deletePricingRow(index, mIdx)}
                                                                             className="p-1 hover:text-red-600 transition-colors"
@@ -940,7 +995,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 </table>
                                             </div>
 
-                                            {!item.itemPricing?.pricingConfirmed && (
+                                            {!item.itemPricing?.pricingConfirmed && !orderPricingConfirmed && (
                                                 <button
                                                     onClick={() => addPricingRow(index)}
                                                     className="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700"
@@ -952,7 +1007,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
                                             <div className="mt-6 flex flex-wrap gap-3 items-center justify-between">
                                                 <div className="flex flex-wrap gap-2">
-                                                    {!item.itemPricing?.pricingConfirmed ? (
+                                                    {!item.itemPricing?.pricingConfirmed && !orderPricingConfirmed ? (
                                                         <button
                                                             onClick={() => confirmPricing(index)}
                                                             className="btn btn-outline py-2 px-4 text-xs font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex items-center gap-2"
@@ -963,7 +1018,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                     ) : (
                                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100 text-xs font-bold">
                                                             <Package className="w-4 h-4" />
-                                                            Pricing Confirmed
+                                                            {orderPricingConfirmed ? "Order Finalized" : "Pricing Confirmed"}
                                                         </div>
                                                     )}
                                                 </div>
@@ -988,6 +1043,26 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         ))}
                     </div>
                 </div >
+
+                {/* 3.5 ORDER-LEVEL CONFIRMATION */}
+                {orderItems.length > 0 && (
+                    <div className="flex justify-center py-8">
+                        {!orderPricingConfirmed ? (
+                            <button
+                                onClick={handleConfirmAllItems}
+                                className="btn bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 text-lg font-bold shadow-xl shadow-indigo-200 hover:-translate-y-1 transition-all flex items-center gap-3 rounded-2xl"
+                            >
+                                <Package className="w-6 h-6" />
+                                <span>Confirm All Items</span>
+                            </button>
+                        ) : (
+                            <div className="bg-green-100 text-green-700 px-8 py-4 rounded-2xl border-2 border-green-200 font-bold flex items-center gap-3 shadow-sm scale-110">
+                                <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
+                                All Items Finalized & Locked
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* 4. OVERALL ORDER PRICING SUMMARY */}
                 {orderItems.length > 0 && (
@@ -1028,6 +1103,24 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             </table>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-4 italic">* This summary is automatically aggregated from all items above. Manual edits are not permitted here.</p>
+
+                        {/* OVERALL BILL BUTTON */}
+                        {orderPricingConfirmed && (
+                            <div className="mt-8 flex justify-center">
+                                <button
+                                    onClick={handleDownloadOverallBill}
+                                    disabled={generatingPdf === "overall"}
+                                    className="btn btn-primary bg-indigo-500 border-none py-4 px-8 text-sm font-bold flex items-center gap-2 shadow-2xl hover:bg-indigo-600 transition-all hover:scale-105"
+                                >
+                                    {generatingPdf === "overall" ? (
+                                        <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <span>📄</span>
+                                    )}
+                                    <span>Generate Overall Estimated Pricing Bill</span>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1084,7 +1177,27 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
 
             {/* Hidden Bill Template for PDF Generation */}
             <div className="fixed -left-[2000px] top-0 opacity-0 pointer-events-none">
-                {selectedBillItem && (
+                {isOverallBill ? (
+                    <BillTemplate
+                        ref={billTemplateRef}
+                        customerName={customerName}
+                        customerPhone={customerPhone}
+                        customerAddress={customerAddress}
+                        billNumber={`OVR-${Date.now().toString().slice(-6)}`}
+                        billDate={new Date().toLocaleDateString("en-IN")}
+                        isEstimated={true}
+                        items={orderItems.map((item, i) => ({
+                            sno: i + 1,
+                            particular: `${item.itemName || 'Item'} (${getGarmentDisplayName(item as any)}) - Item ${i + 1} of ${orderItems.length}`,
+                            qty: Number(item.quantity) || 1,
+                            price: Number(item.itemPricing?.itemTotal) || 0,
+                            total: Number(item.itemPricing?.itemTotal) || 0
+                        }))}
+                        totalAmount={calculateOrderPricingSummary(orderItems as any).overallTotal}
+                        paidAmount={0}
+                        balanceAmount={calculateOrderPricingSummary(orderItems as any).overallTotal}
+                    />
+                ) : selectedBillItem ? (
                     <BillTemplate
                         ref={billTemplateRef}
                         customerName={customerName}
@@ -1092,6 +1205,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         customerAddress={customerAddress}
                         billNumber={`EST-${Date.now().toString().slice(-6)}`}
                         billDate={new Date().toLocaleDateString("en-IN")}
+                        isEstimated={true}
                         items={selectedBillItem.item.itemPricing.materials
                             .filter(m => (Number(m.quantity) || 0) > 0 || (Number(m.price) || 0) > 0)
                             .map((m, i) => ({
@@ -1105,7 +1219,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         paidAmount={0}
                         balanceAmount={selectedBillItem.item.itemPricing.itemTotal}
                     />
-                )}
+                ) : null}
             </div>
         </div >
     );
