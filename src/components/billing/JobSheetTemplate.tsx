@@ -9,10 +9,11 @@ export interface JobSheetTemplateProps {
     itemIndex: number;
     totalItems: number;
     generatedDate: string;
+    generatedBy: string;
 }
 
 const JobSheetTemplate = forwardRef<HTMLDivElement, JobSheetTemplateProps>(
-    ({ item, stageDisplayName, itemIndex, totalItems, generatedDate }, ref) => {
+    ({ item, stageDisplayName, itemIndex, totalItems, generatedDate, generatedBy }, ref) => {
         // Filter measurements to only show those that have values
         const activeMeasurements = Object.entries(item.measurements || {}).filter(
             ([_, value]) => value !== "" && value !== 0 && value !== null && value !== undefined
@@ -40,9 +41,10 @@ const JobSheetTemplate = forwardRef<HTMLDivElement, JobSheetTemplateProps>(
                     <h2 style={{ fontSize: "18px", fontWeight: "600", margin: "0 0 10px 0", color: "#333" }}>
                         {stageDisplayName} Job Sheet
                     </h2>
-                    <p style={{ fontSize: "10px", color: "#666", marginBottom: "5px" }}>
-                        Generated on: {generatedDate}
-                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#666", marginBottom: "5px" }}>
+                        <span>Generated: {generatedDate}</span>
+                        <span>By: {generatedBy}</span>
+                    </div>
                 </div>
 
                 {/* Info Grid */}

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { OrderItem, WorkflowStage } from "@/types";
 import { FileText } from "lucide-react";
 import JobSheetTemplate from "./billing/JobSheetTemplate";
 import Toast from "./Toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface JobSheetButtonProps {
     item: OrderItem;
@@ -23,9 +24,24 @@ export default function JobSheetButton({
     totalItems,
     className = ""
 }: JobSheetButtonProps) {
+    const { userData } = useAuth();
     const [generating, setGenerating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
     const templateRef = useRef<HTMLDivElement>(null);
+
+    // Permission Logic
+    if (!userData) return null;
+
+    const isAdmin = userData.role === "admin";
+    const isSupervisor = userData.role === "supervisor";
+    const isTargetStaff = userData.role === stageName;
+
+    const canGenerate = isAdmin || isSupervisor || isTargetStaff;
+
+    // Strict hidden roles
+    const isDisallowedRole = userData.role === "intake" || userData.role === "accountant";
+
+    if (!canGenerate || isDisallowedRole) return null;
 
     const handleDownload = async () => {
         setGenerating(true);
@@ -87,6 +103,7 @@ export default function JobSheetButton({
                         itemIndex={itemIndex}
                         totalItems={totalItems}
                         generatedDate={new Date().toLocaleString("en-IN")}
+                        generatedBy={`${userData.name} (${userData.role})`}
                     />
                 )}
             </div>
