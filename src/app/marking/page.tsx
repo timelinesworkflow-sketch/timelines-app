@@ -5,7 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import TopBar from "@/components/TopBar";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Order, MarkingTask, User, getGarmentDisplayName } from "@/types";
+import { Order, MarkingTask, User, getGarmentDisplayName, OrderItem } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
     getMarkingTasksForStaff,
@@ -14,14 +14,17 @@ import {
     completeMarkingTask,
     assignMarkingTask,
 } from "@/lib/markingTemplates";
-import { ClipboardList, Play, Check, User as UserIcon, RefreshCw, AlertCircle, Calendar, Package } from "lucide-react";
+import { getItemsForOrder } from "@/lib/orderItems";
+import { ClipboardList, Play, Check, User as UserIcon, RefreshCw, AlertCircle, Calendar, Package, FileText } from "lucide-react";
 import Toast from "@/components/Toast";
+import JobSheetButton from "@/components/JobSheetButton";
 
 // Group tasks by orderId
 interface TaskGroup {
     orderId: string;
     order?: Order;
     tasks: MarkingTask[];
+    items: OrderItem[];
 }
 
 export default function MarkingPage() {
@@ -91,7 +94,10 @@ export default function MarkingPage() {
                 // Sort tasks by taskOrder
                 orderTasks.sort((a, b) => a.taskOrder - b.taskOrder);
 
-                groups.push({ orderId, order, tasks: orderTasks });
+                // Fetch items for this order
+                const items = await getItemsForOrder(orderId);
+
+                groups.push({ orderId, order, tasks: orderTasks, items });
             }
 
             // Sort groups by order due date
@@ -163,6 +169,22 @@ export default function MarkingPage() {
             setToast({ message: "Failed to assign task", type: "error" });
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    const handleUpdateNotes = async (itemId: string, field: "itemNotes" | "machinemanNotes", value: string) => {
+        try {
+            const { updateItem } = await import("@/lib/orderItems");
+            await updateItem(itemId, { [field]: value });
+            // local update
+            setTaskGroups(groups => groups.map(g => ({
+                ...g,
+                items: g.items.map(item => item.itemId === itemId ? { ...item, [field]: value } : item)
+            })));
+            setToast({ message: "Notes updated!", type: "success" });
+        } catch (error) {
+            console.error("Failed to update notes:", error);
+            setToast({ message: "Failed to update notes", type: "error" });
         }
     };
 
@@ -240,7 +262,7 @@ export default function MarkingPage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {taskGroups.map(({ orderId, order, tasks }) => {
+                            {taskGroups.map(({ orderId, order, tasks, items }) => {
                                 const dueStatus = getDueDateStatus(order?.dueDate);
 
                                 return (
@@ -270,8 +292,44 @@ export default function MarkingPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="text-sm text-slate-400">
-                                                    {tasks.length} task{tasks.length !== 1 ? "s" : ""}
+
+                                                <div className="flex flex-col gap-3">
+                                                    <div className="flex flex-wrap gap-2 justify-center">
+                                                        {items.map((item, idx, arr) => (
+                                                            <div key={item.itemId} className="flex flex-col gap-2 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 w-full">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-xs font-bold text-cyan-500">Item {idx + 1}: {item.itemName}</span>
+                                                                    <JobSheetButton
+                                                                        item={item}
+                                                                        stageName="marking"
+                                                                        stageDisplayName="Marking"
+                                                                        itemIndex={idx}
+                                                                        totalItems={arr.length}
+                                                                    />
+                                                                </div>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Item Notes</label>
+                                                                        <textarea
+                                                                            defaultValue={item.itemNotes || ""}
+                                                                            onBlur={(e) => handleUpdateNotes(item.itemId, "itemNotes", e.target.value)}
+                                                                            placeholder="Enter item notes..."
+                                                                            className="w-full h-12 p-2 text-xs bg-slate-900 border border-slate-700 rounded focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-white"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Machineman Notes</label>
+                                                                        <textarea
+                                                                            defaultValue={item.machinemanNotes || ""}
+                                                                            onBlur={(e) => handleUpdateNotes(item.itemId, "machinemanNotes", e.target.value)}
+                                                                            placeholder="Enter notes for machineman..."
+                                                                            className="w-full h-12 p-2 text-xs bg-slate-900 border border-slate-700 rounded focus:ring-1 focus:ring-cyan-500 outline-none resize-none text-white"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

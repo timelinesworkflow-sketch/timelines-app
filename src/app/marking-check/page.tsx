@@ -17,13 +17,17 @@ import {
 } from "@/lib/markingTemplates";
 import { generateCuttingTasksForOrder, getCuttingTasksForOrder } from "@/lib/cuttingTemplates";
 import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
-import { CheckSquare, Check, X, RefreshCw, Calendar, AlertCircle, ChevronRight, Package } from "lucide-react";
+import { getItemsForOrder } from "@/lib/orderItems";
+import { CheckSquare, Check, X, RefreshCw, Calendar, AlertCircle, ChevronRight, Package, FileText } from "lucide-react";
 import Toast from "@/components/Toast";
+import JobSheetButton from "@/components/JobSheetButton";
+import { OrderItem } from "@/types";
 
 interface TaskGroup {
     orderId: string;
     order?: Order;
     tasks: MarkingTask[];
+    items: OrderItem[];
 }
 
 // Helper: Check if a task is a Quality Check (checker) task
@@ -87,6 +91,9 @@ export default function MarkingCheckPage() {
                 // Sort tasks by taskOrder
                 orderTasks.sort((a, b) => a.taskOrder - b.taskOrder);
 
+                // Fetch items for this order
+                const items = await getItemsForOrder(orderId);
+
                 // Auto-claim checker tasks for logged-in checker
                 for (const task of orderTasks) {
                     if (isCheckerTask(task) && (!task.assignedStaffId || task.assignedStaffId === null)) {
@@ -107,7 +114,7 @@ export default function MarkingCheckPage() {
                     }
                 }
 
-                groups.push({ orderId, order, tasks: orderTasks });
+                groups.push({ orderId, order, tasks: orderTasks, items });
             }
 
             // Sort groups by order due date
@@ -337,7 +344,7 @@ export default function MarkingCheckPage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {taskGroups.map(({ orderId, order, tasks }) => {
+                            {taskGroups.map(({ orderId, order, tasks, items }) => {
                                 const dueStatus = getDueDateStatus(order?.dueDate);
                                 const progress = getProgress(tasks);
 
@@ -367,6 +374,18 @@ export default function MarkingCheckPage() {
                                                             </span>
                                                         </div>
                                                     </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {items.map((item, idx, arr) => (
+                                                        <JobSheetButton
+                                                            key={item.itemId}
+                                                            item={item}
+                                                            stageName="marking"
+                                                            stageDisplayName="Marking"
+                                                            itemIndex={idx}
+                                                            totalItems={arr.length}
+                                                        />
+                                                    ))}
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     {/* Progress Indicator */}

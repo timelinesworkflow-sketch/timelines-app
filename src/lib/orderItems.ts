@@ -223,6 +223,25 @@ export async function getItemsForStage(
 }
 
 /**
+ * Get all items for a specific order
+ */
+export async function getItemsForOrder(orderId: string): Promise<OrderItem[]> {
+    const itemsRef = collection(db, "orderItems");
+    const q = query(
+        itemsRef,
+        where("orderId", "==", orderId)
+    );
+    const snapshot = await getDocs(q);
+    const items = snapshot.docs.map(doc => ({
+        ...doc.data() as OrderItem,
+        itemId: doc.id // Ensure ID is present
+    }));
+
+    // Sort by name or creation? Let's use name if available, else date
+    return items.sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
+}
+
+/**
  * Update an item with generic fields
  */
 export async function updateItem(itemId: string, updates: Partial<OrderItem>): Promise<void> {

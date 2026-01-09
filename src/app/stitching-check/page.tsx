@@ -16,12 +16,16 @@ import {
     areAllStitchingTasksApproved,
 } from "@/lib/stitchingTemplates";
 import { getNextStage, addTimelineEntry, logStaffWork } from "@/lib/orders";
-import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight } from "lucide-react";
+import { getItemsForOrder } from "@/lib/orderItems";
+import { CheckSquare, Check, X, RefreshCw, User as UserIcon, Calendar, AlertCircle, ChevronRight, FileText } from "lucide-react";
 import Toast from "@/components/Toast";
+import JobSheetButton from "@/components/JobSheetButton";
+import { OrderItem } from "@/types";
 
 interface OrderWithTasks {
     order: Order;
     tasks: StitchingTask[];
+    items: OrderItem[];
 }
 
 export default function StitchingCheckPage() {
@@ -71,12 +75,12 @@ export default function StitchingCheckPage() {
             for (const order of orders) {
                 let tasks = await getStitchingTasksForOrder(order.orderId);
 
-                // Generate tasks if none exist and garmentType is defined
                 if (tasks.length === 0 && order.garmentType) {
                     tasks = await generateStitchingTasksForOrder(order.orderId, order.garmentType);
                 }
 
-                ordersWithTasksData.push({ order, tasks });
+                const items = await getItemsForOrder(order.orderId);
+                ordersWithTasksData.push({ order, tasks, items });
             }
 
             setOrdersWithTasks(ordersWithTasksData);
@@ -290,7 +294,7 @@ export default function StitchingCheckPage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {ordersWithTasks.map(({ order, tasks }) => {
+                            {ordersWithTasks.map(({ order, tasks, items }) => {
                                 const dueStatus = getDueDateStatus(order.dueDate);
                                 const progress = getProgress(tasks);
 
@@ -319,6 +323,18 @@ export default function StitchingCheckPage() {
                                                             </span>
                                                         </div>
                                                     </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {items.map((item, idx, arr) => (
+                                                        <JobSheetButton
+                                                            key={item.itemId}
+                                                            item={item}
+                                                            stageName="stitching"
+                                                            stageDisplayName="Stitching"
+                                                            itemIndex={idx}
+                                                            totalItems={arr.length}
+                                                        />
+                                                    ))}
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     {/* Progress Indicator */}

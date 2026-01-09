@@ -617,6 +617,10 @@ export interface OrderItem {
     // Item-level Pricing & Billing
     itemPricing?: ItemPricing;
 
+    // Additional Notes for Job Sheets
+    machinemanNotes?: string;
+    itemNotes?: string;
+
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }

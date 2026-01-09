@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl, WorkflowStage, ItemStatus, ItemReferenceImage, getGarmentDisplayName } from "@/types";
+import { Order, OrderItem, MEASUREMENT_LABELS, getSamplerImageUrl, WorkflowStage, ItemStatus, ItemReferenceImage, getGarmentDisplayName, DesignSection } from "@/types";
 import { getItemsForStage, updateItemStage, getNextWorkflowStage } from "@/lib/orderItems";
 import { addTimelineEntry, logStaffWork } from "@/lib/orders";
 import { canViewCustomerInfo } from "@/lib/privacy";
-import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, X as XIcon, Eye, Package, ChevronDown, ChevronUp, Image as ImageIcon, FileText } from "lucide-react";
 import Toast from "@/components/Toast";
 import MaterialsView from "@/components/MaterialsView";
 import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
+import JobSheetButton from "@/components/JobSheetButton";
 
 interface StagePageContentProps {
     stageName: string;
@@ -47,6 +48,7 @@ export default function StagePageContent({
         try {
             const itemsData = await getItemsForStage(stageName, userData?.staffId);
             setItems(itemsData);
+            setCurrentIndex(0);
         } catch (error) {
             console.error("Failed to load items:", error);
             setToast({ message: "Failed to load workflow items", type: "error" });
@@ -138,6 +140,25 @@ export default function StagePageContent({
         }
     };
 
+    const handleUpdateNotes = async (field: "itemNotes" | "machinemanNotes", value: string) => {
+        if (!currentItem) return;
+
+        try {
+            const { updateItem } = await import("@/lib/orderItems");
+            await updateItem(currentItem.itemId, { [field]: value });
+
+            // Update local state
+            const updatedItems = [...items];
+            updatedItems[currentIndex] = { ...currentItem, [field]: value };
+            setItems(updatedItems);
+
+            setToast({ message: "Notes updated successfully!", type: "success" });
+        } catch (error) {
+            console.error("Failed to update notes:", error);
+            setToast({ message: "Failed to update notes", type: "error" });
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center py-12">
@@ -181,21 +202,14 @@ export default function StagePageContent({
                 {/* Header Info */}
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-100 dark:border-gray-700 pb-4 mb-4">
                     <div>
-                        <div className="flex items-center space-x-2 mb-1">
-                            <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        <h1 className="text-xl font-bold flex items-center">
+                            <span className="bg-indigo-600 text-white w-8 h-8 rounded-lg flex items-center justify-center mr-3 text-sm">
                                 {currentIndex + 1}
                             </span>
-                            <span className="text-sm text-gray-500 font-medium uppercase tracking-wide">
-                                {currentIndex + 1} of {items.length} Items
-                            </span>
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             {canSeeCustomer ? currentItem.customerName : "Customer"}
-                            <span className="text-gray-300 dark:text-gray-600">/</span>
-                            <span className="text-indigo-600 dark:text-indigo-400">{currentItem.itemName || "Item"}</span>
-                        </h2>
+                        </h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            ID: <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">{currentItem.itemId}</span>
+                            {currentItem.itemName || "Item"} | {getGarmentDisplayName(currentItem)} | Due: {currentItem.dueDate?.toDate().toLocaleDateString() || "No Date"}
                         </p>
                     </div>
                     <div className="text-right">
@@ -348,6 +362,17 @@ export default function StagePageContent({
                         )}
                         <span>Complete Stage for Item</span>
                     </button>
+                )}
+
+                {/* Job Sheet Button - Show only for Marking, Cutting, Stitching */}
+                {(stageName === 'marking' || stageName === 'cutting' || stageName === 'stitching') && (
+                    <JobSheetButton
+                        item={currentItem}
+                        stageName={stageName as WorkflowStage}
+                        stageDisplayName={stageDisplayName}
+                        itemIndex={currentIndex}
+                        totalItems={items.length}
+                    />
                 )}
 
                 <button
