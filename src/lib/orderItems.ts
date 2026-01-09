@@ -81,14 +81,15 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         timeline: [],
         itemPricing: {
             materials: [
-                { name: garmentType ? (garmentType.replace(/_/g, " ").toUpperCase()) : "GARMENT", quantity: 1, price: 0, isDefault: true },
-                { name: "Lining", quantity: 0, price: 0, isDefault: true },
-                { name: "Sari", quantity: 0, price: 0, isDefault: true },
-                { name: "Zigzag", quantity: 0, price: 0, isDefault: true },
-                { name: "False", quantity: 0, price: 0, isDefault: true },
-                { name: "Others", quantity: 0, price: 0, isDefault: true },
+                { name: garmentType ? (garmentType.replace(/_/g, " ").toUpperCase()) : "GARMENT", quantity: 1, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: true },
+                { name: "Lining", quantity: 0, unit: "Meter", ratePerUnit: 0, total: 0, isDefault: true },
+                { name: "Sari", quantity: 0, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: true },
+                { name: "Zigzag", quantity: 0, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: true },
+                { name: "False", quantity: 0, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: true },
+                { name: "Others", quantity: 0, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: true },
             ],
             itemTotal: 0,
+            itemEstimatedTotal: 0,
             pricingConfirmed: false,
         }
     };
@@ -338,22 +339,24 @@ export function calculateItemsTotals(items: OrderItem[]): {
  * Aggregate item-level pricing into order-level summary
  */
 export function calculateOrderPricingSummary(items: OrderItem[]): {
-    materials: { name: string; quantity: number; price: number }[];
+    materials: { name: string; quantity: number; total: number }[];
     overallTotal: number;
 } {
-    const materialMap: Record<string, { quantity: number; price: number }> = {};
+    const materialMap: Record<string, { quantity: number; total: number }> = {};
     let overallTotal = 0;
 
     items.forEach(item => {
         if (item.itemPricing) {
-            overallTotal += item.itemPricing.itemTotal || 0;
+            overallTotal += item.itemPricing.itemEstimatedTotal || 0;
             item.itemPricing.materials.forEach(m => {
                 const key = m.name;
                 if (!materialMap[key]) {
-                    materialMap[key] = { quantity: 0, price: 0 };
+                    materialMap[key] = { quantity: 0, total: 0 };
                 }
-                materialMap[key].quantity += (Number(m.quantity) || 0);
-                materialMap[key].price += (Number(m.quantity) || 0) * (Number(m.price) || 0);
+                const q = (Number(m.quantity) || 0);
+                const t = (Number(m.total) || 0);
+                materialMap[key].quantity += q;
+                materialMap[key].total += t;
             });
         }
     });
@@ -361,8 +364,8 @@ export function calculateOrderPricingSummary(items: OrderItem[]): {
     const materials = Object.entries(materialMap).map(([name, data]) => ({
         name,
         quantity: data.quantity,
-        price: data.price
-    })).filter(m => m.quantity > 0 || m.price > 0);
+        total: data.total
+    })).filter(m => m.quantity > 0 || m.total > 0);
 
     return {
         materials,

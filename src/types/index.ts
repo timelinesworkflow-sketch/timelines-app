@@ -547,7 +547,9 @@ export type ItemMeasurementType = "measurements" | "measurement_garment";
 export interface ItemPricingMaterial {
     name: string;
     quantity: number;
-    price: number;
+    unit: MaterialUnit;
+    ratePerUnit: number;
+    total: number; // quantity * ratePerUnit
     color?: string;
     isDefault: boolean;
 }
@@ -555,18 +557,22 @@ export interface ItemPricingMaterial {
 export interface ItemPricing {
     materials: ItemPricingMaterial[];
     itemTotal: number;
+    itemEstimatedTotal: number; // Same as itemTotal, explicit for new model
     pricingConfirmed: boolean;
 }
 
 export interface OrderPricingSummaryMaterial {
     name: string;
     quantity: number;
-    price: number;
+    unit?: MaterialUnit;
+    ratePerUnit?: number;
+    total: number;
 }
 
 export interface OrderPricingSummary {
     materials: OrderPricingSummaryMaterial[];
     overallTotal: number;
+    overallEstimatedTotal: number; // Explicit for new model
 }
 
 // Individual item within an order - NOW THE PRIMARY WORKFLOW UNIT

@@ -190,7 +190,6 @@ export default function ReferenceImageUpload({
                                 ref={(el) => { if (el) fileInputRefs.current[index] = el; }}
                                 type="file"
                                 accept="image/*"
-                                capture="environment"
                                 onChange={(e) => handleFileChange(index, e)}
                                 className="hidden"
                             />
@@ -270,7 +269,6 @@ export default function ReferenceImageUpload({
                                     ref={(el) => { if (el) sketchInputRefs.current[index] = el; }}
                                     type="file"
                                     accept="image/*"
-                                    capture="environment"
                                     onChange={(e) => handleSketchFileChange(index, e)}
                                     className="hidden"
                                 />
