@@ -26,16 +26,15 @@ type LocalOrderItem = Partial<OrderItem> & {
     designSectionFiles?: Record<string, { main?: File; sketch?: File }>;
     customGarmentName?: string;
     itemPricing: {
-        materials: {
-            name: string;
+        pricingRows: {
+            materialName: string;
             quantity: number | "";
-            unit: "Meter" | "Gram" | "Packet";
+            unit: "meter" | "gram" | "packet";
             ratePerUnit: number | "";
-            total: number;
+            rowTotal: number;
             color?: string;
             isDefault: boolean;
         }[];
-        itemTotal: number;
         itemEstimatedTotal: number;
         pricingConfirmed: boolean;
     };
@@ -186,18 +185,18 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const handlePricingChange = (itemIdx: number, matIdx: number, field: string, value: any) => {
         const newItems = [...orderItems];
         const item = { ...newItems[itemIdx] };
-        const materials = [...item.itemPricing.materials];
-        materials[matIdx] = { ...materials[matIdx], [field]: value };
+        const rows = [...item.itemPricing.pricingRows];
+        rows[matIdx] = { ...rows[matIdx], [field]: value };
 
         // Auto-calculate row total
-        const q = typeof materials[matIdx].quantity === 'number' ? materials[matIdx].quantity : 0;
-        const r = typeof materials[matIdx].ratePerUnit === 'number' ? materials[matIdx].ratePerUnit : 0;
-        materials[matIdx].total = q * r;
+        const q = typeof rows[matIdx].quantity === 'number' ? rows[matIdx].quantity : 0;
+        const r = typeof rows[matIdx].ratePerUnit === 'number' ? rows[matIdx].ratePerUnit : 0;
+        rows[matIdx].rowTotal = q * r;
 
         // Auto-calculate item total
-        const total = materials.reduce((sum, mat) => sum + (mat.total || 0), 0);
+        const total = rows.reduce((sum, row) => sum + (row.rowTotal || 0), 0);
 
-        item.itemPricing = { ...item.itemPricing, materials, itemTotal: total, itemEstimatedTotal: total };
+        item.itemPricing = { ...item.itemPricing, pricingRows: rows, itemEstimatedTotal: total };
         newItems[itemIdx] = item;
         setOrderItems(newItems);
     };
@@ -207,9 +206,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         const item = { ...newItems[itemIdx] };
         item.itemPricing = {
             ...item.itemPricing,
-            materials: [
-                ...item.itemPricing.materials,
-                { name: "", quantity: 0, unit: "Packet", ratePerUnit: 0, total: 0, isDefault: false }
+            pricingRows: [
+                ...item.itemPricing.pricingRows,
+                { materialName: "", quantity: "", unit: "packet", ratePerUnit: 0, rowTotal: 0, isDefault: false }
             ]
         };
         newItems[itemIdx] = item;
@@ -219,12 +218,12 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const deletePricingRow = (itemIdx: number, matIdx: number) => {
         const newItems = [...orderItems];
         const item = { ...newItems[itemIdx] };
-        if (item.itemPricing.materials[matIdx].isDefault) return;
+        if (item.itemPricing.pricingRows[matIdx].isDefault) return;
 
-        const materials = item.itemPricing.materials.filter((_, i) => i !== matIdx);
-        const total = materials.reduce((sum, mat) => sum + (mat.total || 0), 0);
+        const rows = item.itemPricing.pricingRows.filter((_, i) => i !== matIdx);
+        const total = rows.reduce((sum, row) => sum + (row.rowTotal || 0), 0);
 
-        item.itemPricing = { ...item.itemPricing, materials, itemTotal: total, itemEstimatedTotal: total };
+        item.itemPricing = { ...item.itemPricing, pricingRows: rows, itemEstimatedTotal: total };
         newItems[itemIdx] = item;
         setOrderItems(newItems);
     };
@@ -910,34 +909,34 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 </h4>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs font-bold px-3 py-1 bg-indigo-600 text-white rounded-full shadow-sm ring-2 ring-indigo-900/50">
-                                                        Item Total: ₹{(item.itemPricing?.itemTotal || 0).toLocaleString()}
+                                                        Item Total: ₹{(item.itemPricing?.itemEstimatedTotal || 0).toLocaleString()}
                                                     </span>
                                                 </div>
                                             </div>
 
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-[11px] text-left border-collapse bg-slate-900 rounded-lg shadow-xl border border-slate-700">
-                                                    <thead className="bg-slate-800 text-gray-300 font-black uppercase tracking-wider">
+                                                    <thead className="bg-slate-800 text-gray-200 font-extrabold uppercase tracking-wider">
                                                         <tr>
                                                             <th className="px-3 py-2.5 border-b border-slate-700">Material</th>
                                                             <th className="px-3 py-2.5 border-b border-slate-700 w-24 text-center">Unit</th>
                                                             <th className="px-3 py-2.5 border-b border-slate-700 w-20 text-center">Qty</th>
-                                                            <th className="px-3 py-2.5 border-b border-slate-700 w-24 text-right">Rate</th>
+                                                            <th className="px-3 py-2.5 border-b border-slate-700 w-24 text-right">Rate (Per Unit)</th>
                                                             <th className="px-3 py-2.5 border-b border-slate-700 w-28 text-right">Total</th>
                                                             <th className="px-3 py-2.5 border-b border-slate-700">Color (Opt)</th>
                                                             <th className="px-3 py-2.5 border-b border-slate-700 w-10"></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-800">
-                                                        {item.itemPricing?.materials.map((mat, mIdx) => (
-                                                            <tr key={mIdx} className="hover:bg-slate-800/50 transition-colors">
+                                                        {item.itemPricing?.pricingRows.map((mat, mIdx) => (
+                                                            <tr key={mIdx} className="hover:bg-slate-800/80 transition-colors border-b border-slate-800/50">
                                                                 <td className="px-3 py-2">
                                                                     <input
                                                                         type="text"
-                                                                        value={mat.name}
-                                                                        onChange={(e) => handlePricingChange(index, mIdx, 'name', e.target.value)}
+                                                                        value={mat.materialName}
+                                                                        onChange={(e) => handlePricingChange(index, mIdx, 'materialName', e.target.value)}
                                                                         disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed || mat.isDefault}
-                                                                        className="w-full bg-slate-950 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 font-bold text-white disabled:opacity-50 disabled:bg-transparent placeholder:text-gray-600"
+                                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 font-bold text-white disabled:opacity-50 placeholder:text-gray-600"
                                                                         placeholder="Material name..."
                                                                     />
                                                                 </td>
@@ -946,11 +945,11 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         value={mat.unit}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'unit', e.target.value)}
                                                                         disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
-                                                                        className="w-full bg-slate-950 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-center font-bold text-gray-300 disabled:opacity-50 disabled:bg-transparent appearance-none"
+                                                                        className="w-full bg-slate-950 border border-slate-700 focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-center font-bold text-gray-300 disabled:opacity-50 appearance-none"
                                                                     >
-                                                                        <option value="Meter">Meters</option>
-                                                                        <option value="Gram">Grams</option>
-                                                                        <option value="Packet">Packets</option>
+                                                                        <option value="meter">meter</option>
+                                                                        <option value="gram">gram</option>
+                                                                        <option value="packet">packet</option>
                                                                     </select>
                                                                 </td>
                                                                 <td className="px-3 py-2">
@@ -959,16 +958,17 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         value={mat.quantity}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
+                                                                            // Default empty behavior: replacement
                                                                             handlePricingChange(index, mIdx, 'quantity', val === "" ? "" : Number(val));
                                                                         }}
                                                                         onFocus={(e) => e.target.select()}
                                                                         disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
-                                                                        className="w-full bg-slate-950 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-center font-black text-white disabled:opacity-50 disabled:bg-transparent placeholder:text-gray-600"
+                                                                        className="w-full bg-slate-950 border border-slate-700 focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-center font-black text-white disabled:opacity-50 placeholder:text-gray-600"
                                                                         placeholder="0"
                                                                     />
                                                                 </td>
                                                                 <td className="px-3 py-2">
-                                                                    <div className="flex items-center justify-end font-black text-white bg-slate-950 rounded px-2 py-1">
+                                                                    <div className="flex items-center justify-end font-black text-white bg-slate-950 border border-slate-700 rounded px-2 py-1">
                                                                         <span className="mr-0.5 text-indigo-400">₹</span>
                                                                         <input
                                                                             type="number"
@@ -985,8 +985,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right">
-                                                                    <div className="px-2 py-1 bg-slate-900/80 rounded font-black text-indigo-300">
-                                                                        ₹{(mat.total || 0).toLocaleString()}
+                                                                    <div className="px-2 py-1 bg-indigo-900/40 rounded font-black text-indigo-200 border border-indigo-500/30">
+                                                                        ₹{(mat.rowTotal || 0).toLocaleString()}
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-3 py-2">
@@ -995,7 +995,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                         value={mat.color || ""}
                                                                         onChange={(e) => handlePricingChange(index, mIdx, 'color', e.target.value)}
                                                                         disabled={item.itemPricing?.pricingConfirmed || orderPricingConfirmed}
-                                                                        className="w-full bg-slate-950 border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-gray-400 font-medium disabled:opacity-50 disabled:bg-transparent italic placeholder:text-gray-600"
+                                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-indigo-500 rounded px-2 py-1 text-gray-400 font-medium disabled:opacity-50 italic placeholder:text-gray-600"
                                                                         placeholder="Optional"
                                                                     />
                                                                 </td>
@@ -1210,8 +1210,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                             sno: i + 1,
                             particular: `${item.itemName || 'Item'} (${getGarmentDisplayName(item as any)}) - Item ${i + 1} of ${orderItems.length}`,
                             qty: Number(item.quantity) || 1,
-                            price: Number(item.itemPricing?.itemTotal) || 0,
-                            total: Number(item.itemPricing?.itemTotal) || 0
+                            price: Number(item.itemPricing?.itemEstimatedTotal) || 0,
+                            total: Number(item.itemPricing?.itemEstimatedTotal) || 0
                         }))}
                         totalAmount={calculateOrderPricingSummary(orderItems as any).overallTotal}
                         paidAmount={0}
@@ -1226,18 +1226,18 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         billNumber={`EST-${Date.now().toString().slice(-6)}`}
                         billDate={new Date().toLocaleDateString("en-IN")}
                         isEstimated={true}
-                        items={selectedBillItem.item.itemPricing.materials
+                        items={selectedBillItem.item.itemPricing.pricingRows
                             .filter(m => (Number(m.quantity) || 0) > 0 || (Number(m.ratePerUnit) || 0) > 0)
                             .map((m, i) => ({
                                 sno: i + 1,
-                                particular: m.name,
+                                particular: m.materialName,
                                 qty: Number(m.quantity) || 0,
                                 price: Number(m.ratePerUnit) || 0,
-                                total: Number(m.total) || 0
+                                total: Number(m.rowTotal) || 0
                             }))}
-                        totalAmount={selectedBillItem.item.itemPricing.itemTotal}
+                        totalAmount={selectedBillItem.item.itemPricing.itemEstimatedTotal}
                         paidAmount={0}
-                        balanceAmount={selectedBillItem.item.itemPricing.itemTotal}
+                        balanceAmount={selectedBillItem.item.itemPricing.itemEstimatedTotal}
                     />
                 ) : null}
             </div>

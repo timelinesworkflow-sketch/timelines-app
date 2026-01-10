@@ -189,7 +189,7 @@ export interface MaterialItem {
 }
 
 // Material measurement unit type
-export type MaterialUnit = "Meter" | "Gram" | "Packet";
+export type MaterialUnit = "meter" | "gram" | "packet";
 
 // Planned Material (at Intake Stage - PLANNING ONLY, no inventory reduction)
 export interface PlannedMaterial {
@@ -545,19 +545,18 @@ export type ItemMeasurementType = "measurements" | "measurement_garment";
 // ============================================
 
 export interface ItemPricingMaterial {
-    name: string;
-    quantity: number;
+    materialName: string;
+    quantity: number | "";
     unit: MaterialUnit;
     ratePerUnit: number;
-    total: number; // quantity * ratePerUnit
+    rowTotal: number; // quantity * ratePerUnit
     color?: string;
     isDefault: boolean;
 }
 
 export interface ItemPricing {
-    materials: ItemPricingMaterial[];
-    itemTotal: number;
-    itemEstimatedTotal: number; // Same as itemTotal, explicit for new model
+    pricingRows: ItemPricingMaterial[];
+    itemEstimatedTotal: number;
     pricingConfirmed: boolean;
 }
 
