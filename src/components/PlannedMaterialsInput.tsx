@@ -208,8 +208,8 @@ export default function PlannedMaterialsInput({
                                         value={item.materialSource || "company"}
                                         onChange={(e) => updateItem(index, "materialSource", e.target.value)}
                                         className={`w-24 px-2 py-1 text-sm border-0 bg-transparent focus:ring-2 focus:ring-indigo-500 rounded font-medium ${(item.materialSource || "company") === "customer"
-                                                ? "text-orange-600 dark:text-orange-400"
-                                                : "text-green-600 dark:text-green-400"
+                                            ? "text-orange-600 dark:text-orange-400"
+                                            : "text-green-600 dark:text-green-400"
                                             }`}
                                         disabled={disabled}
                                     >
