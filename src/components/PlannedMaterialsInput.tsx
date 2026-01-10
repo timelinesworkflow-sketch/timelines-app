@@ -16,7 +16,7 @@ export default function PlannedMaterialsInput({
     disabled = false,
 }: PlannedMaterialsInputProps) {
     // Define selectedUnit first since createEmptyItem needs it
-    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("Meter");
+    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("meter");
     const [showUnitDropdown, setShowUnitDropdown] = useState(false);
     const dropdownRef = useRef<HTMLTableCellElement>(null);
 
@@ -26,7 +26,7 @@ export default function PlannedMaterialsInput({
         materialName: "",
         colour: "",
         measurement: 0,
-        unit: "Meter", // Use default value, will be updated by useEffect when unit changes
+        unit: "meter", // Use default value, will be updated by useEffect when unit changes
         materialSource: "company", // Default to company-provided
     });
 
@@ -134,7 +134,7 @@ export default function PlannedMaterialsInput({
                                 </button>
                                 {showUnitDropdown && (
                                     <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10 min-w-[120px]">
-                                        {(["Meter", "Gram", "Packet"] as MaterialUnit[]).map((unit) => (
+                                        {(["meter", "gram", "packet"] as MaterialUnit[]).map((unit) => (
                                             <button
                                                 key={unit}
                                                 type="button"

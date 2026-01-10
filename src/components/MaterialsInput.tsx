@@ -34,7 +34,7 @@ export default function MaterialsInput({ order, onComplete, loading }: Materials
             : [{ materialId: "", materialName: "", colour: "", measurement: 0 }]
     );
 
-    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("Meter");
+    const [selectedUnit, setSelectedUnit] = useState<MaterialUnit>("meter");
     const [showUnitDropdown, setShowUnitDropdown] = useState(false);
 
     // Close dropdown when clicking outside
@@ -135,7 +135,7 @@ export default function MaterialsInput({ order, onComplete, loading }: Materials
                                 </button>
                                 {showUnitDropdown && (
                                     <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10 min-w-[120px]">
-                                        {(["Meter", "Gram", "Packet"] as MaterialUnit[]).map((unit) => (
+                                        {(["meter", "gram", "packet"] as MaterialUnit[]).map((unit) => (
                                             <button
                                                 key={unit}
                                                 type="button"
