@@ -626,6 +626,17 @@ export interface OrderItem {
     machinemanNotes?: string;
     itemNotes?: string;
 
+    // Revision System (GitHub-style)
+    itemVersion: number;
+    isActiveVersion: boolean;
+    revisionReason?: string;
+    revisedBy?: {
+        staffId: string;
+        name: string;
+        role: string;
+    };
+    revisedAt?: Timestamp;
+
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }
@@ -729,6 +740,7 @@ export interface Order {
 
     // Item-based Pricing Summary
     orderPricingSummary?: OrderPricingSummary;
+    pricingDirty?: boolean; // If any item is revised after confirmation
 }
 
 export interface SubTask {

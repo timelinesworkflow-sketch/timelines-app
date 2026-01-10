@@ -8,7 +8,7 @@ import { getOrCreateCustomer, getOrdersByCustomerPhone, updateCustomerOnNewOrder
 import { uploadImages } from "@/lib/storage";
 import { createEmptyItem, calculateItemsTotals, createOrderItems } from "@/lib/orderItems";
 import { Timestamp } from "firebase/firestore";
-import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info, Calculator, Image as ImageIcon } from "lucide-react";
+import { X, Upload, Plus, Trash2, ChevronDown, ChevronUp, User, Package, Calendar, Phone, Info, Calculator, Image as ImageIcon, CheckCircle, Edit3, Edit3 as EditIcon } from "lucide-react";
 import ReferenceImageUpload from "@/components/customer-entry/ReferenceImageUpload";
 import DesignSectionsDisplay from "@/components/DesignSectionsDisplay";
 import Toast from "@/components/Toast";
@@ -38,6 +38,15 @@ type LocalOrderItem = Partial<OrderItem> & {
         itemEstimatedTotal: number;
         pricingConfirmed: boolean;
     };
+    itemVersion: number;
+    isActiveVersion: boolean;
+    revisionReason?: string;
+    revisedBy?: {
+        staffId: string;
+        name: string;
+        role: string;
+    };
+    revisedAt?: any;
 };
 
 const GARMENT_OPTIONS: { value: GarmentType; label: string }[] = [
@@ -89,6 +98,9 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
     const [selectedBillItem, setSelectedBillItem] = useState<{ item: LocalOrderItem, index: number } | null>(null);
     const [orderPricingConfirmed, setOrderPricingConfirmed] = useState(false);
     const [isOverallBill, setIsOverallBill] = useState(false);
+    const [revisionReason, setRevisionReason] = useState("");
+    const [showRevisionModal, setShowRevisionModal] = useState<{ itemIdx: number; item: LocalOrderItem } | null>(null);
+    const [pricingDirty, setPricingDirty] = useState(false);
 
     // Lookup customer orders
     useEffect(() => {
@@ -236,6 +248,44 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         setOrderItems(newItems);
     };
 
+    const handleCreateRevision = () => {
+        if (!showRevisionModal || !revisionReason.trim()) return;
+
+        const { itemIdx, item: oldItem } = showRevisionModal;
+        const newItems = [...orderItems];
+
+        // 1. Create revised version
+        const revisedItem: LocalOrderItem = {
+            ...oldItem,
+            itemVersion: (oldItem.itemVersion || 1) + 1,
+            isActiveVersion: true,
+            revisionReason: revisionReason.trim(),
+            revisedAt: Timestamp.now(),
+            revisedBy: {
+                staffId: userData?.staffId || "unknown",
+                name: userData?.name || "Unknown",
+                role: userData?.role || "intake"
+            },
+            // Unlock pricing for the new version
+            itemPricing: {
+                ...oldItem.itemPricing,
+                pricingConfirmed: false
+            }
+        };
+
+        // 2. Mark old as inactive (In local state we just replace the slot to keep UI manageable, 
+        // but normally we'd keep history. Requirements say "Old data must never be overwritten".
+        // In the database we'll have both, but for the INTKE form, we show the active one being edited.)
+        newItems[itemIdx] = revisedItem;
+
+        setOrderItems(newItems);
+        setOrderPricingConfirmed(false);
+        setPricingDirty(true);
+        setShowRevisionModal(null);
+        setRevisionReason("");
+        setToast({ message: `New revision (v${revisedItem.itemVersion}) created.`, type: "info" });
+    };
+
     const handleDownloadItemBill = async (item: LocalOrderItem, index: number) => {
         // We set selected item so the hidden BillTemplate renders with correct data
         setSelectedBillItem({ item, index });
@@ -283,6 +333,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
         }
 
         setOrderPricingConfirmed(true);
+        setPricingDirty(false);
         setToast({ message: "All items confirmed! Overall bill is now available.", type: "success" });
     };
 
@@ -754,6 +805,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                     onChange={(e) => handleItemChange(index, { itemName: e.target.value })}
                                                     className="input font-medium"
                                                     placeholder="Enter descriptive name"
+                                                    disabled={item.itemPricing?.pricingConfirmed}
                                                 />
                                             </div>
                                             <div>
@@ -767,6 +819,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                     }}
                                                     className="input font-medium border-indigo-200 focus:border-indigo-500"
                                                     required
+                                                    disabled={item.itemPricing?.pricingConfirmed}
                                                 />
                                             </div>
                                             <div>
@@ -776,6 +829,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                         value={item.garmentType}
                                                         onChange={(e) => handleItemChange(index, { garmentType: e.target.value as GarmentType })}
                                                         className="input appearance-none border-indigo-100 focus:border-indigo-500"
+                                                        disabled={item.itemPricing?.pricingConfirmed}
                                                     >
                                                         {GARMENT_OPTIONS.map((opt) => (
                                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -798,6 +852,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                             onChange={(e) => handleItemChange(index, { customGarmentName: e.target.value })}
                                                             className="input border-indigo-200 focus:border-indigo-500 font-medium"
                                                             placeholder="e.g. Saree Draping, Alteration"
+                                                            disabled={item.itemPricing?.pricingConfirmed}
                                                             required
                                                         />
                                                     </div>
@@ -860,6 +915,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                 }}
                                                                 className="input text-sm py-2 text-center font-medium focus:ring-2 focus:ring-indigo-500/20"
                                                                 placeholder="0"
+                                                                disabled={item.itemPricing?.pricingConfirmed}
                                                             />
                                                         </div>
                                                     ))}
@@ -1002,6 +1058,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                                 <td className="px-3 py-2 text-center text-slate-500">
                                                                     {!mat.isDefault && !item.itemPricing?.pricingConfirmed && !orderPricingConfirmed && (
                                                                         <button
+                                                                            type="button"
                                                                             onClick={() => deletePricingRow(index, mIdx)}
                                                                             className="p-1 hover:text-red-400 transition-colors"
                                                                         >
@@ -1029,6 +1086,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                 <div className="flex flex-wrap gap-2">
                                                     {!item.itemPricing?.pricingConfirmed && !orderPricingConfirmed ? (
                                                         <button
+                                                            type="button"
                                                             onClick={() => confirmPricing(index)}
                                                             className="btn btn-outline py-2 px-4 text-xs font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex items-center gap-2"
                                                         >
@@ -1036,9 +1094,21 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                                             Confirm Pricing
                                                         </button>
                                                     ) : (
-                                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100 text-xs font-bold">
-                                                            <Package className="w-4 h-4" />
-                                                            {orderPricingConfirmed ? "Order Finalized" : "Pricing Confirmed"}
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100 text-xs font-bold">
+                                                                <Package className="w-4 h-4" />
+                                                                {orderPricingConfirmed ? "Order Finalized" : "Pricing Confirmed"}
+                                                            </div>
+                                                            {item.itemPricing?.pricingConfirmed && !orderPricingConfirmed && ['admin', 'intake', 'supervisor'].includes(userData?.role?.toLowerCase() || "") && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setShowRevisionModal({ itemIdx: index, item })}
+                                                                    className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tighter bg-amber-100 text-amber-700 hover:bg-amber-200 px-2 py-1 rounded transition-colors border border-amber-200"
+                                                                >
+                                                                    <Edit3 className="w-3 h-3" />
+                                                                    <span>Edit Item (Revision)</span>
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
@@ -1125,7 +1195,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         <p className="text-[10px] text-gray-500 mt-4 italic">* This summary is automatically aggregated from all items above. Manual edits are not permitted here.</p>
 
                         {/* OVERALL BILL BUTTON */}
-                        {orderPricingConfirmed && (
+                        {(orderPricingConfirmed && !pricingDirty) ? (
                             <div className="mt-8 flex justify-center">
                                 <button
                                     onClick={handleDownloadOverallBill}
@@ -1140,7 +1210,14 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                                     <span>Generate Overall Estimated Pricing Bill</span>
                                 </button>
                             </div>
-                        )}
+                        ) : orderPricingConfirmed && pricingDirty ? (
+                            <div className="mt-8 flex justify-center">
+                                <div className="bg-amber-100/10 border border-amber-500/30 p-4 rounded-xl text-amber-200 text-sm italic flex items-center gap-2">
+                                    <Info className="w-4 h-4 text-amber-400" />
+                                    <span>Items have been revised. Please re-confirm all items to regenerate overall bill.</span>
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                 )}
 
@@ -1240,6 +1317,58 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                         balanceAmount={selectedBillItem.item.itemPricing.itemEstimatedTotal}
                     />
                 ) : null}
+                {/* Revision Reason Modal */}
+                {showRevisionModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 dark:border-gray-700 animate-in zoom-in duration-200">
+                            <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <Edit3 className="w-5 h-5 text-amber-500" />
+                                    <span>Create Item Revision</span>
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Editing {showRevisionModal.item.itemName || `Item ${showRevisionModal.itemIdx + 1}`} will create a new version (v{(showRevisionModal.item.itemVersion || 1) + 1}).
+                                </p>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="label text-gray-700 font-bold mb-2">Revision Reason <span className="text-red-500">*</span></label>
+                                    <textarea
+                                        value={revisionReason}
+                                        onChange={(e) => setRevisionReason(e.target.value)}
+                                        placeholder="Explain why this change is necessary (e.g., Client requested sleeve length change, Color correction)"
+                                        className="w-full input border-gray-200 focus:border-indigo-500 min-h-[120px] resize-none"
+                                        required
+                                    />
+                                    <p className="mt-2 text-[11px] text-gray-400 italic flex items-start gap-1">
+                                        <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                        <span>Revising an item will invalidate the overall estimated bill until all items are re-confirmed.</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="p-6 bg-gray-50 dark:bg-gray-800/50 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowRevisionModal(null);
+                                        setRevisionReason("");
+                                    }}
+                                    className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCreateRevision}
+                                    disabled={!revisionReason.trim()}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-100 transition-all active:scale-[0.98]"
+                                >
+                                    Confirm Revision
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div >
     );

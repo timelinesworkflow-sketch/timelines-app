@@ -11,6 +11,7 @@ interface ReferenceImageUploadProps {
     onFilesUpdate?: (files: { file: File | null; sketchFile: File | null }[]) => void;
     uploading?: boolean;
     allowSketch?: boolean;
+    disabled?: boolean;
 }
 
 interface ImageUploadState {
@@ -30,6 +31,7 @@ export default function ReferenceImageUpload({
     onFilesUpdate,
     uploading = false,
     allowSketch = true,
+    disabled = false,
 }: ReferenceImageUploadProps) {
     // We maintain purely local state for the files, but we sync metadata to parent
     const [imageStates, setImageStates] = useState<ImageUploadState[]>([
@@ -214,20 +216,23 @@ export default function ReferenceImageUpload({
                                         >
                                             <Eye className="w-5 h-5" />
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => triggerFileInput(index)}
-                                            className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs text-white"
-                                        >
-                                            Change
-                                        </button>
+                                        {!disabled && (
+                                            <button
+                                                type="button"
+                                                onClick={() => triggerFileInput(index)}
+                                                className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs text-white"
+                                            >
+                                                Change
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => triggerFileInput(index)}
-                                    className="w-32 h-32 border-2 border-dashed border-gray-500 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-slate-800/50"
+                                    onClick={() => !disabled && triggerFileInput(index)}
+                                    disabled={disabled}
+                                    className={`w-32 h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors ${disabled ? 'border-slate-700 bg-slate-800/20 text-gray-600 cursor-not-allowed' : 'border-gray-500 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 bg-slate-800/50'}`}
                                 >
                                     <Camera className="w-8 h-8" />
                                     <span className="text-xs font-medium">Add Photo</span>
@@ -244,8 +249,9 @@ export default function ReferenceImageUpload({
                                     value={state.title}
                                     onChange={(e) => updateField(index, "title", e.target.value)}
                                     placeholder="e.g. Front View, Sleeve Detail"
-                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none placeholder-gray-500"
+                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     required
+                                    disabled={disabled}
                                 />
                             </div>
                             <div>
@@ -255,7 +261,8 @@ export default function ReferenceImageUpload({
                                     onChange={(e) => updateField(index, "description", e.target.value)}
                                     placeholder="Any specific notes about this view..."
                                     rows={2}
-                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none resize-none placeholder-gray-500"
+                                    className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg text-sm border border-slate-500 focus:border-cyan-500 focus:outline-none resize-none placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={disabled}
                                 />
                             </div>
                         </div>
@@ -288,32 +295,37 @@ export default function ReferenceImageUpload({
                                             >
                                                 <Eye className="w-4 h-4" />
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => triggerSketchInput(index)}
-                                                className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] text-white"
-                                            >
-                                                Change
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const newStates = [...imageStates];
-                                                    newStates[index] = { ...newStates[index], sketchFile: null, sketchPreview: "" };
-                                                    setImageStates(newStates);
-                                                    emitChanges(newStates);
-                                                }}
-                                                className="px-2 py-0.5 bg-red-500/50 hover:bg-red-500/70 rounded text-[10px] text-white"
-                                            >
-                                                Remove
-                                            </button>
+                                            {!disabled && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => triggerSketchInput(index)}
+                                                        className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] text-white"
+                                                    >
+                                                        Change
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newStates = [...imageStates];
+                                                            newStates[index] = { ...newStates[index], sketchFile: null, sketchPreview: "" };
+                                                            setImageStates(newStates);
+                                                            emitChanges(newStates);
+                                                        }}
+                                                        className="px-2 py-0.5 bg-red-500/50 hover:bg-red-500/70 rounded text-[10px] text-white"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
                                     <button
                                         type="button"
-                                        onClick={() => triggerSketchInput(index)}
-                                        className="w-24 h-24 border-2 border-dashed border-slate-600 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-500 hover:border-gray-400 hover:text-gray-300 transition-colors bg-slate-800/30"
+                                        onClick={() => !disabled && triggerSketchInput(index)}
+                                        disabled={disabled}
+                                        className={`w-24 h-24 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1 transition-colors ${disabled ? 'border-slate-800 bg-slate-900/20 text-gray-700 cursor-not-allowed' : 'border-slate-600 text-gray-500 hover:border-gray-400 hover:text-gray-300 bg-slate-800/30'}`}
                                     >
                                         <Plus className="w-5 h-5" />
                                         <span className="text-[10px]">Add Photo</span>
@@ -323,14 +335,16 @@ export default function ReferenceImageUpload({
                         )}
 
                         {/* Top Right Remove Button (for the whole row) */}
-                        <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute top-2 right-2 text-gray-500 hover:text-red-400 transition-colors"
-                            title="Remove Image"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
+                        {!disabled && (
+                            <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute top-2 right-2 text-gray-500 hover:text-red-400 transition-colors"
+                                title="Remove Image"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
 
                     </div>
 
@@ -353,9 +367,9 @@ export default function ReferenceImageUpload({
                 <button
                     type="button"
                     onClick={addNewImageSlot}
-                    disabled={!canAddMore}
+                    disabled={!canAddMore || disabled}
                     className={`w-full py-4 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all group
-                        ${canAddMore
+                            ${(canAddMore && !disabled)
                             ? 'border-slate-600 hover:border-indigo-500 hover:bg-indigo-500/10 cursor-pointer text-gray-400 hover:text-indigo-400'
                             : 'border-slate-700 opacity-50 cursor-not-allowed text-gray-600'
                         }`}

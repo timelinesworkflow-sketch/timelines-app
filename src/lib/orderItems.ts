@@ -79,6 +79,8 @@ export function createEmptyItem(itemNumber: number, garmentType?: GarmentType): 
         handledByName: "",
         dueDate: Timestamp.now(),
         timeline: [],
+        itemVersion: 1,
+        isActiveVersion: true,
         itemPricing: {
             pricingRows: [
                 { materialName: garmentType ? (garmentType.replace(/_/g, " ").toUpperCase()) : "GARMENT", quantity: "", unit: "packet", ratePerUnit: 0, rowTotal: 0, isDefault: true },
