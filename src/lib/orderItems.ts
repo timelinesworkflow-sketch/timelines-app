@@ -268,18 +268,10 @@ export async function updateItemStage(
     staffUid?: string
 ): Promise<void> {
     const itemRef = doc(db, "orderItems", itemId);
+    const docSnap = await getDoc(itemRef);
 
-    // We need to append to timeline. 
-    // Using arrayUnion is safer for concurrency but requires exact object match which includes timestamp.
-    // Ideally we use a transaction or just read-modify-write.
-    // For now, since we need to read the current timeline to append correctly:
+    if (!docSnap.exists()) return;
 
-    const itemQuery = query(collection(db, "orderItems"), where("itemId", "==", itemId));
-    const snapshot = await getDocs(itemQuery);
-
-    if (snapshot.empty) return;
-
-    const docSnap = snapshot.docs[0];
     const currentItem = docSnap.data() as OrderItem;
 
     const timelineEntry: ItemTimelineEntry = {
