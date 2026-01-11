@@ -33,6 +33,7 @@ export async function createPurchaseRequest(data: {
     requestedByStaffId: string;
     requestedByStaffName: string;
     requestedByRole: UserRole;
+    requestedByUid?: string; // Correctly add UID
     purchaseType: PurchaseType;
     sourceStage: "intake" | "materials";
     orderId?: string;
@@ -49,6 +50,7 @@ export async function createPurchaseRequest(data: {
         requestedByStaffId: data.requestedByStaffId,
         requestedByStaffName: data.requestedByStaffName,
         requestedByRole: data.requestedByRole,
+        requestedByUid: data.requestedByUid, // Save UID
         purchaseType: data.purchaseType,
         sourceStage: data.sourceStage,
         orderId: data.orderId,

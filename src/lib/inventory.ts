@@ -23,7 +23,7 @@ import {
 } from "@/types";
 
 const INVENTORY_COLLECTION = "inventory";
-const PURCHASES_COLLECTION = "material_purchases";
+const PURCHASES_COLLECTION = "purchases";
 const USAGE_COLLECTION = "material_usage";
 
 // ============================================
@@ -199,6 +199,7 @@ export async function recordMaterialPurchase(data: {
     costPerMeter: number;
     staffId: string;
     staffName: string;
+    uid?: string; // Optional for rules
 }): Promise<string> {
     return addPurchase({
         materialId: data.materialId,
@@ -209,7 +210,8 @@ export async function recordMaterialPurchase(data: {
         costPerMeter: data.costPerMeter,
         laborStaffId: data.staffId,
         laborStaffName: data.staffName,
-    });
+        laborStaffUid: data.uid,
+    } as any);
 }
 
 // ============================================
@@ -218,7 +220,7 @@ export async function recordMaterialPurchase(data: {
 
 // Record material usage for an order
 export async function recordMaterialUsage(
-    usageData: Omit<MaterialUsage, "usageId" | "createdAt" | "totalLength">
+    usageData: Omit<MaterialUsage, "usageId" | "createdAt" | "totalLength"> & { laborStaffUid?: string }
 ): Promise<string> {
     const totalLength = usageData.quantity * usageData.meter;
 
@@ -230,11 +232,12 @@ export async function recordMaterialUsage(
         usageId: usageRef.id,
         totalLength,
         createdAt: Timestamp.now(),
-    };
+    } as any;
+
     await setDoc(usageRef, usage);
 
     // Update inventory
-    const { docRef, existing } = await getOrCreateInventory(
+    const { docRef } = await getOrCreateInventory(
         usageData.materialId,
         usageData.materialName,
         usageData.category

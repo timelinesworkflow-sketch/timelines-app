@@ -56,27 +56,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [impersonatedRole, userData?.role]);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            setUser(firebaseUser);
+        // Fallback: If Firebase takes too long to respond, force loading to false
+        // so the user can at least see the login UI.
+        const timeoutId = setTimeout(() => {
+            if (loading) {
+                console.warn("[AuthContext] Auth state check timed out. Forcing loading false.");
+                setLoading(false);
+            }
+        }, 10000); // 10 seconds
 
-            if (firebaseUser) {
-                // Fetch user data from Firestore
-                const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-                if (userDoc.exists()) {
-                    const data = userDoc.data() as User;
-                    setUserData(data);
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log(`[AuthContext] State changed: ${firebaseUser ? 'Logged In (' + firebaseUser.email + ')' : 'Logged Out'}`);
+
+            try {
+                setUser(firebaseUser);
+
+                if (firebaseUser) {
+                    // Fetch user data from Firestore
+                    const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+                    if (userDoc.exists()) {
+                        const data = userDoc.data() as User;
+                        setUserData(data);
+                    } else {
+                        console.warn(`[AuthContext] No user document found for UID: ${firebaseUser.uid}`);
+                        setUserData(null);
+                    }
                 } else {
                     setUserData(null);
+                    setImpersonatedRole(null); // Clear impersonation on logout
                 }
-            } else {
-                setUserData(null);
-                setImpersonatedRole(null); // Clear impersonation on logout
+            } catch (error) {
+                console.error("[AuthContext] Error in onAuthStateChanged:", error);
+            } finally {
+                setLoading(false);
+                clearTimeout(timeoutId);
             }
-
-            setLoading(false);
         });
 
-        return unsubscribe;
+        return () => {
+            unsubscribe();
+            clearTimeout(timeoutId);
+        };
     }, []);
 
     const signIn = async (email: string, password: string) => {
@@ -113,8 +133,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <AuthContext.Provider value={{
-            user,
-            userData,
+            user,      // Contains firebase uid
+            userData,  // Contains custom staffId
             loading,
             signIn,
             signOut,

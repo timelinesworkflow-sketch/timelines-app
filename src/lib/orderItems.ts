@@ -264,7 +264,8 @@ export async function updateItemStage(
     newStage: WorkflowStage,
     newStatus: ItemStatus,
     staffId: string,
-    staffName: string
+    staffName: string,
+    staffUid?: string
 ): Promise<void> {
     const itemRef = doc(db, "orderItems", itemId);
 
@@ -272,23 +273,6 @@ export async function updateItemStage(
     // Using arrayUnion is safer for concurrency but requires exact object match which includes timestamp.
     // Ideally we use a transaction or just read-modify-write.
     // For now, since we need to read the current timeline to append correctly:
-
-    // Use getDoc because the ID is the key
-    const { getDoc } = await import("firebase/firestore"); // Dynamic import or assume it's imported (it is not in current imports list fully)
-    // Actually getDocs is imported, but getDoc is not imported in the file currently (checking imports).
-    // The imports are: doc, updateDoc, Timestamp, collection, addDoc, getDocs, query, where, orderBy, setDoc
-    // Missing: getDoc.
-    // So I will update imports first or use getDocs with ID query if I must, but doc() reference is available.
-    // I can just import getDoc at the top.
-    // But since I am replacing this block, I can't easily add top-level imports.
-    // I will use updateDoc with arrayUnion if I can trust it, but without getDoc I can't read old timeline.
-    // Actually, I can use runTransaction if I import it.
-
-    // For now, I will use getDocs with generic query or assume I can add getDoc to imports in a separate step?
-    // No, I'll just use getDocs(query(collection(db, "orderItems"), where("__name__", "==", itemId))) or similar.
-    // Or just use the existing inefficient query for now but fix the logic.
-    // But wait, the existing code used getDocs with where("itemId" == itemId). This assumes itemId field exists.
-    // My createOrderItems sets itemId field. So it works.
 
     const itemQuery = query(collection(db, "orderItems"), where("itemId", "==", itemId));
     const snapshot = await getDocs(itemQuery);
@@ -302,8 +286,9 @@ export async function updateItemStage(
         stage: currentItem.currentStage, // Log completion of *current* stage
         completedBy: staffId,
         completedByName: staffName,
-        completedAt: Timestamp.now()
-    };
+        completedAt: Timestamp.now(),
+        completedByUid: staffUid
+    } as any;
 
     const newTimeline = [...(currentItem.timeline || []), timelineEntry];
 
@@ -313,7 +298,8 @@ export async function updateItemStage(
         timeline: newTimeline,
         updatedAt: Timestamp.now(),
         handledBy: staffId,
-        handledByName: staffName
+        handledByName: staffName,
+        handledByUid: staffUid || null
     });
 }
 

@@ -29,7 +29,7 @@ export default function StagePageContent({
     previousStage,
     children,
 }: StagePageContentProps) {
-    const { userData } = useAuth();
+    const { user, userData } = useAuth();
     const [items, setItems] = useState<OrderItem[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -97,20 +97,22 @@ export default function StagePageContent({
                 nextStage,
                 nextStatus,
                 userData.staffId,
-                userData.name || "Staff"
+                userData.name || "Staff",
+                user?.uid // Pass UID here
             );
 
             // Log global work for salary/auditing
-            await logStaffWork({
-                staffId: userData.staffId,
-                firebaseUid: userData.email, // using email as uid per current pattern
-                email: userData.email,
-                role: userData.role,
-                orderId: currentItem.orderId,
-                stage: stageName,
-                action: actionType === "reject" ? "checked_reject" : (isChecker ? "checked_ok" : "completed"),
-                // We add itemId implicitly to context if logic changes, but standard log uses orderId
-            });
+            if (user) {
+                await logStaffWork({
+                    staffId: userData.staffId,
+                    firebaseUid: user.uid, // Correctly use Firebase UID
+                    email: userData.email,
+                    role: userData.role,
+                    orderId: currentItem.orderId,
+                    stage: stageName,
+                    action: actionType === "reject" ? "checked_reject" : (isChecker ? "checked_ok" : "completed"),
+                });
+            }
 
             // Add timeline entry
             await addTimelineEntry(currentItem.orderId, {
@@ -132,9 +134,15 @@ export default function StagePageContent({
                 setCurrentIndex(currentIndex - 1);
             }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            setToast({ message: `Failed to ${actionType}`, type: "error" });
+            const isPermissionError = error.code === 'permission-denied' || error.message?.includes('permission');
+            setToast({
+                message: isPermissionError
+                    ? `Permission Denied: Your role (${userData?.role}) may not have access to update ${stageName}.`
+                    : `Failed to ${actionType}: ${error.message || 'Unknown error'}`,
+                type: "error"
+            });
         } finally {
             setActionLoading(false);
         }

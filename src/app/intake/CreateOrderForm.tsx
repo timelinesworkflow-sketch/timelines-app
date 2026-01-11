@@ -45,6 +45,7 @@ type LocalOrderItem = Partial<OrderItem> & {
         staffId: string;
         name: string;
         role: string;
+        uid?: string; // Correctly add UID for security
     };
     revisedAt?: any;
 };
@@ -66,7 +67,7 @@ const GARMENT_OPTIONS: { value: GarmentType; label: string }[] = [
 ];
 
 export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
-    const { userData } = useAuth();
+    const { user, userData } = useAuth();
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
     // Form state - Global Customer Data Only
@@ -264,7 +265,8 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             revisedBy: {
                 staffId: userData?.staffId || "unknown",
                 name: userData?.name || "Unknown",
-                role: userData?.role || "intake"
+                role: userData?.role || "intake",
+                uid: user?.uid // Pass UID here
             },
             // Unlock pricing for the new version
             itemPricing: {

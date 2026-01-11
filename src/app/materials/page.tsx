@@ -148,8 +148,9 @@ export default function MaterialsPage() {
                         quantity: 1,
                         meter: deductLength,
                         totalLength: deductLength,
-                        laborStaffId: user!.uid,
+                        laborStaffId: userData!.staffId, // Use staffId (STF101)
                         laborStaffName: userData?.name || "Unknown",
+                        laborStaffUid: user!.uid,       // Use Firebase UID
                         createdAt: Timestamp.now()
                     } as any);
                 }
@@ -162,8 +163,9 @@ export default function MaterialsPage() {
                     item.itemId,
                     nextStage,
                     "in_progress", // Next stage triggers default status
-                    user!.uid,
-                    userData?.name || "Unknown"
+                    userData!.staffId,
+                    userData?.name || "Unknown",
+                    user!.uid
                 );
 
                 toast.success(`Item moved to ${nextStage}`);
@@ -174,8 +176,9 @@ export default function MaterialsPage() {
                     item.itemId,
                     "completed",
                     "completed",
-                    user!.uid,
-                    userData?.name || "Unknown"
+                    userData!.staffId,
+                    userData?.name || "Unknown",
+                    user!.uid
                 );
                 setItems(prev => prev.filter(i => i.itemId !== item.itemId));
             }
@@ -195,9 +198,10 @@ export default function MaterialsPage() {
                 measurement: material.shortageLength || material.measurement,
                 unit: material.unit,
                 dueDate: item.dueDate?.toDate() || new Date(),
-                requestedByStaffId: user!.uid,
+                requestedByStaffId: userData!.staffId, // Use staffId
                 requestedByStaffName: userData?.name || "Unknown",
                 requestedByRole: "materials",
+                requestedByUid: user!.uid, // Use UID
                 purchaseType: "order",
                 sourceStage: "materials",
                 orderId: item.orderId,

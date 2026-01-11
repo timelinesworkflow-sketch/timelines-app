@@ -236,6 +236,7 @@ export interface MaterialPurchase {
     supplier?: string;           // Optional supplier name
     laborStaffId: string;        // Auto-filled (NOT editable)
     laborStaffName: string;      // Auto-filled (NOT editable)
+    laborStaffUid?: string;      // Added for security rules
     createdAt: Timestamp;
 }
 
@@ -252,6 +253,7 @@ export interface MaterialUsage {
     totalLength: number;         // Calculated: quantity × meter
     laborStaffId: string;        // Auto-filled (NOT editable)
     laborStaffName: string;      // Auto-filled (NOT editable)
+    laborStaffUid?: string;      // Added for security rules
     createdAt: Timestamp;
 }
 
@@ -294,6 +296,7 @@ export interface PurchaseRequest {
     requestedByStaffId: string;
     requestedByStaffName: string;
     requestedByRole: UserRole;
+    requestedByUid?: string; // Correctly add UID for security
     purchaseType: PurchaseType;
     sourceStage: "intake" | "materials";  // Where the purchase was requested from
     // Order-based purchase fields (only for purchaseType: "order")
@@ -498,8 +501,9 @@ export type ItemStatus =
 // Timeline entry for tracking item progress through stages
 export interface ItemTimelineEntry {
     stage: string;
-    completedBy: string;       // userId
-    completedByName?: string;  // Staff name
+    completedBy: string;      // StaffId (e.g. STF101)
+    completedByName: string;  // Staff Display Name
+    completedByUid?: string;  // Firebase UID
     completedAt: Timestamp;
 }
 
@@ -590,9 +594,10 @@ export interface OrderItem {
     timeline: ItemTimelineEntry[]; // Detailed history
 
     // Assignment
-    handledBy: string;          // Current handler userId
-    handledByName?: string;     // Current handler name
-    dueDate: Timestamp;         // Item-specific due date
+    handledBy: string;           // Custom StaffId (e.g. STF101)
+    handledByName: string;       // Staff display name
+    handledByUid?: string;       // Firebase UID for security rules authentication
+    dueDate: Timestamp;          // Final item-level deadline
 
     // New: Measurement type toggle (per item)
     measurementType: ItemMeasurementType;
@@ -633,7 +638,8 @@ export interface OrderItem {
     revisedBy?: {
         staffId: string;
         name: string;
-        role: string;
+        role: UserRole;
+        uid?: string; // Correctly add UID for security
     };
     revisedAt?: Timestamp;
 
