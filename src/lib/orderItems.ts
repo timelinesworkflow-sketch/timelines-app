@@ -190,7 +190,7 @@ export async function getItemsForStage(
     staffId?: string
 ): Promise<OrderItem[]> {
     const itemsRef = collection(db, "orderItems");
-    let q = query(
+    const q = query(
         itemsRef,
         where("currentStage", "==", stage),
         // orderBy("dueDate", "asc") // Requires composite index, careful

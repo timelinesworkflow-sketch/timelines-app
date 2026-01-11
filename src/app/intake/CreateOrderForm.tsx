@@ -513,12 +513,16 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                     itemId: item.itemId || `ITEM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     referenceImages,
                     designSections: processedDesignSections,
+                    handledBy: userData?.staffId || "system",
+                    handledByName: userData?.name || "System",
+                    handledByUid: user?.uid,
                     dueDate: item.dueDate || Timestamp.fromDate(new Date()),
                     measurements: item.measurements || {},
                     timeline: [{
                         stage: "intake",
                         completedBy: userData?.staffId || "system",
                         completedByName: userData?.name || "System",
+                        completedByUid: user?.uid,
                         completedAt: Timestamp.now()
                     }],
                     status: "in_progress",
@@ -542,6 +546,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
                 customerName,
                 customerPhone,
                 customerAddress,
+                createdByUid: user?.uid, // Track creator
 
                 // Set global defaults (Use first item's due date or current time)
                 dueDate: processedItems[0]?.dueDate || Timestamp.now(),
@@ -575,6 +580,7 @@ export default function CreateOrderForm({ onClose }: CreateOrderFormProps) {
             // 3. Update Order 
             await updateOrder(orderId, {
                 confirmedAt: Timestamp.now(),
+                updatedByUid: user?.uid, // Track updater
             });
 
             // 4. Update Customer Stats

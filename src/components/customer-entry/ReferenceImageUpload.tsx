@@ -113,7 +113,6 @@ export default function ReferenceImageUpload({
 
     const updateField = (index: number, field: keyof ImageUploadState, value: string) => {
         const newStates = [...imageStates];
-        // @ts-ignore
         newStates[index] = { ...newStates[index], [field]: value };
         setImageStates(newStates);
         emitChanges(newStates);

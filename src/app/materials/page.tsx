@@ -136,7 +136,7 @@ export default function MaterialsPage() {
                 const targetInvItem = inventory.find(i => i.inventoryId === material.materialId) || invItem;
 
                 if (targetInvItem) {
-                    let deductLength = material.measurement;
+                    const deductLength = Number(material.measurement);
 
                     // Record Usage (This also updates inventory stock in lib/inventory.ts)
                     await recordMaterialUsage({

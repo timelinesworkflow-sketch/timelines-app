@@ -700,6 +700,8 @@ export interface Order {
     customerName: string;
     customerPhone: string;
     customerAddress: string;
+    createdByUid?: string;
+    updatedByUid?: string;
 
     // Order-level Dates
     createdAt: Timestamp;
