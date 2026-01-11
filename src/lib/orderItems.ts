@@ -4,7 +4,7 @@
  */
 
 import { db } from "./firebase";
-import { doc, updateDoc, Timestamp, collection, addDoc, getDocs, query, where, orderBy, setDoc } from "firebase/firestore";
+import { doc, updateDoc, Timestamp, collection, addDoc, getDocs, getDoc, query, where, orderBy, setDoc } from "firebase/firestore";
 import { Order, OrderItem, ItemStatus, OverallOrderStatus, ItemTimelineEntry, GarmentType, WorkflowStage, AssignedStaff, createDefaultDesignSections } from "@/types";
 import { sanitizeForFirestore } from "./firestoreSanitize";
 
