@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user has specific role
+    function hasRole(role) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    
+    // Helper function to check if user is admin or supervisor
+    function isAdminOrSupervisor() {
+      return hasRole('admin') || hasRole('supervisor');
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // Allow users to read their own document
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow admins to read/write any user document
+      allow read, write: if hasRole('admin');
+      
+      // Allow creation during signup (for new users being created)
+      allow create: if isAuthenticated();
+    }
+    
+    // ============================================
+    // ORDERS COLLECTION
+    // ============================================
+    match /orders/{orderId} {
+      // Allow authenticated users to read orders
+      allow read: if isAuthenticated();
+      
+      // Allow intake staff, supervisors, and admins to create orders
+      allow create: if hasRole('intake') || hasRole('supervisor') || hasRole('admin');
+      
+      // Allow staff to update orders they're working on
+      allow update: if isAuthenticated();
+      
+      // Allow admins to delete
+      allow delete: if hasRole('admin');
+      
+      // Subcollection for order timeline
+      match /timeline/{timelineId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+    }
+    
+    // ============================================
+    // CUSTOMERS COLLECTION
+    // ============================================
+    match /customers/{customerId} {
+      // Allow authenticated users to read customers
+      allow read: if isAuthenticated();
+      
+      // Allow intake, accountant, admin to create/update customers
+      allow create, update: if hasRole('intake') || hasRole('accountant') || hasRole('admin');
+      
+      // Allow admins to delete
+      allow delete: if hasRole('admin');
+    }
+    
+    // ============================================
+    // INVENTORY COLLECTION
+    // ============================================
+    match /inventory/{itemId} {
+      // Allow authenticated users to read inventory
+      allow read: if isAuthenticated();
+      
+      // Allow material staff and admins to write
+      allow write: if hasRole('material') || hasRole('admin');
+    }
+    
+    // ============================================
+    // MATERIALS COLLECTION
+    // ============================================
+    match /materials/{materialId} {
+      // Allow authenticated users to read
+      allow read: if isAuthenticated();
+      
+      // Allow material staff and admins to write
+      allow write: if hasRole('material') || hasRole('admin');
+    }
+    
+    // ============================================
+    // PURCHASES COLLECTION
+    // ============================================
+    match /purchases/{purchaseId} {
+      // Allow authenticated users to read
+      allow read: if isAuthenticated();
+      
+      // Allow purchase staff and admins to write
+      allow write: if hasRole('purchase') || hasRole('admin');
+    }
+    
+    // ============================================
+    // SALARY & WAGE COLLECTIONS
+    // ============================================
+    match /salaryCredits/{creditId} {
+      // Allow authenticated users to read their own salary
+      allow read: if isAuthenticated();
+      
+      // Allow accountants and admins to read/write
+      allow read, write: if hasRole('accountant') || hasRole('admin');
+    }
+    
+    match /advances/{advanceId} {
+      allow read: if isAuthenticated();
+      allow read, write: if hasRole('accountant') || hasRole('admin');
+    }
+    
+    match /dailyWages/{wageId} {
+      allow read: if isAuthenticated();
+      allow read, write: if hasRole('accountant') || hasRole('admin');
+    }
+    
+    match /staffWorkLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if hasRole('admin') || hasRole('accountant');
+    }
+    
+    // ============================================
+    // TEMPLATES COLLECTIONS
+    // ============================================
+    match /markingTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('admin');
+    }
+    
+    match /cuttingTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('admin');
+    }
+    
+    match /stitchingTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('admin');
+    }
+    
+    // ============================================
+    // DEFAULT DENY ALL OTHER COLLECTIONS
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
