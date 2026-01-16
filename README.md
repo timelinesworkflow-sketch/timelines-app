@@ -2,6 +2,8 @@
 
 A comprehensive internal tailoring shop workflow management system built with Next.js, TypeScript, Tailwind CSS, and Firebase.
 
+these project teach me lots of lessons to learn and process of executing as much as fast for the project we close
+
 ## Features
 
 ### 🔐 Authentication & Access Control
